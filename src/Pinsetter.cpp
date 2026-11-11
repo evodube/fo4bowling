@@ -31,7 +31,7 @@ namespace fb
 		constexpr double        kSweepHalfDepth = 5.0 * kSweepScale;
 		// the plate that holds the pins: the first pinsetter's deck (the yellow-lit steel panel), under the machine
 		constexpr RE::TESFormID kTableBase = 0x00135F6C;  // MacBasePanelBMed01: 98 x 84 x 9, its foot at z 0
-		constexpr float         kTableScale = 1.15f;      // -> 113 across the lane, 97 deep: over the whole rack
+		constexpr float         kTableScale = 1.15f;      // -> 113 down the lane, 97 across: over the whole rack
 		constexpr double        kTableBottom = 0.0;
 		constexpr double        kTableHeight = 9.0 * kTableScale;  // (the machine sits on top of it)
 		constexpr double        kGrab = 0.8;              // the deck's underside this far above a standing pin's head
@@ -119,10 +119,12 @@ namespace fb
 			return util::NodeRotation(m);
 		}
 
-		// the plate under the machine lies across the lane: its long x along the world's y
-		RE::NiMatrix3 AcrossTheLane()
+		// the plate under the machine: it's a wedge, thick at its -x end and thin at +x. Lengthwise down the lane,
+		// its thin end back under the machine and its thick edge facing the bowler, so it reads as one solid plate
+		// rather than a blade tapering off to nothing at one side
+		RE::NiMatrix3 DownTheLane()
 		{
-			const double m[3][3]{ { 0.0, -1.0, 0.0 }, { 1.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 } };
+			const double m[3][3]{ { -1.0, 0.0, 0.0 }, { 0.0, -1.0, 0.0 }, { 0.0, 0.0, 1.0 } };
 			return util::NodeRotation(m);
 		}
 
@@ -304,7 +306,7 @@ namespace fb
 		double       machineZ = deckZ;
 		if (auto table = _table.get()) {
 			Prepare(table.get(), _tablePrepared);
-			PlaceNode(table.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, deckZ + kTableBottom), AcrossTheLane(), false, kTableScale);
+			PlaceNode(table.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, deckZ + kTableBottom), DownTheLane(), false, kTableScale);
 			machineZ += kTableHeight;
 		}
 		PlaceNode(deck.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, machineZ + kDeckBottom), MachineFacing(), false, kDeckScale);

@@ -303,10 +303,45 @@ namespace bowl
 		}
 		if ((b.state == BallState::kLane || b.state == BallState::kGutter) && b.pos.x > _spec.deckEnd + R) {
 			b.state = BallState::kPit;
-			AddEvent(Event::Kind::kBallPit, b.pos, b.vel.Length());
+			b.pitTime = 0.0;
+			b.hitBack = false;
+		}
+		if (b.state == BallState::kPit) {
+			// in the slot in front of the back wall: it hits the wall, comes off it to one side and runs along the
+			// slot until it's taken into the machine at the side wall
+			const double back = _spec.deckEnd + _spec.pitBack;
+			b.pitTime += a_dt;
+			b.pos += b.vel * a_dt;
+			b.z += (R - b.z) * std::min(1.0, 8.0 * a_dt);  // (up out of a gutter onto the slot's floor)
+			if (b.pos.x + R > back) {
+				const double into = b.vel.x;
+				b.pos.x = back - R;
+				b.vel.x = -0.25 * std::abs(into);
+				if (!b.hitBack) {
+					b.hitBack = true;
+					// which way it goes: the way it was already heading across, or (head on) towards the nearer side
+					const double side = std::abs(b.vel.y) > 5.0 ? (b.vel.y > 0.0 ? 1.0 : -1.0) : (b.pos.y >= 0.0 ? 1.0 : -1.0);
+					b.vel.y = side * std::max(std::abs(b.vel.y), 0.45 * std::abs(into));
+					AddEvent(Event::Kind::kBallPit, b.pos, std::abs(into));
+				}
+			}
+			if (b.pos.x < _spec.deckEnd + R) {
+				b.pos.x = _spec.deckEnd + R;  // (the deck's edge keeps it in the slot)
+				b.vel.x = std::max(0.0, b.vel.x);
+			}
+			// rolling along the slot, never quite stopping (the slot runs down to the sides)
+			const double across = std::abs(b.vel.y);
+			if (b.hitBack && across < 80.0) {
+				b.vel.y = (b.vel.y != 0.0 ? (b.vel.y > 0.0 ? 1.0 : -1.0) : (b.pos.y >= 0.0 ? 1.0 : -1.0)) * std::min(80.0, across + 150.0 * a_dt);
+			}
+			b.vel.x *= std::max(0.0, 1.0 - 3.0 * a_dt);
+			b.spin = { -b.vel.y / R, b.vel.x / R, 0.0 };
+			if (std::abs(b.pos.y) + R > _spec.kickback || b.pitTime > 4.0) {
+				b.state = BallState::kTaken;
+			}
 		}
 		if (b.state == BallState::kLane && b.vel.Length() < 3.0 && _sinceThrow > 2.0) {
-			b.state = BallState::kPit;  // (died on the lane: the pinsetter takes it)
+			b.state = BallState::kTaken;  // (died on the lane: the pinsetter takes it)
 		}
 		RotateBy(b.orient, b.spin, a_dt);
 	}
@@ -331,7 +366,7 @@ namespace bowl
 		StepBall(kStep);
 		StepPins(kStep);
 
-		bool moving = _ball.state == BallState::kLane || _ball.state == BallState::kGutter;
+		bool moving = _ball.state == BallState::kLane || _ball.state == BallState::kGutter || _ball.state == BallState::kPit;
 		for (const auto& p : _pins) {
 			// (pins already in a gutter or the pit can't change anything: only the ones on the deck count)
 			if (!p.frozen && !p.asleep && p.state != PinState::kGone) {
@@ -490,7 +525,7 @@ namespace bowl
 					}
 				}
 				if (at.x + r > s.deckEnd + s.pitBack) {
-					add(kWorld, i, { s.deckEnd + s.pitBack, at.y, at.z }, { -1.0, 0.0, 0.0 }, at.x + r - (s.deckEnd + s.pitBack), 0.1, s.pinFriction);
+					add(kWorld, i, { s.deckEnd + s.pitBack, at.y, at.z }, { -1.0, 0.0, 0.0 }, at.x + r - (s.deckEnd + s.pitBack), s.pitBackRestitution, s.pinFriction);
 				}
 			}
 		}

@@ -79,9 +79,10 @@ namespace bowl
 		double gutterDepth{ 8.0 };
 		double kickback{ 112.0 };       // the side walls round the pin deck, either side of the middle
 		double kickbackStart{ 1024.0 }; // ...from here (the masking wall) to the deck's end
-		double deckEnd{ 1280.0 };       // past this: the pit
+		double deckEnd{ 1205.0 };       // past this: the pit (a slot in front of the back wall)
 		double pitDepth{ 80.0 };
-		double pitBack{ 70.0 };         // the pit's back cushion, this far past the deck's end
+		double pitBack{ 27.0 };         // the back wall, this far past the deck's end (1232: the cell's own wall)
+		double pitBackRestitution{ 0.45 };  // pins and the ball bounce off it
 		double oilLength{ 700.0 };      // the oiled front of the lane; dry from here on
 		double oilFriction{ 0.04 };     // ball-lane sliding friction on oil
 		double dryFriction{ 0.20 };     // ...and on the dry back end
@@ -115,7 +116,8 @@ namespace bowl
 		kHeld,    // not thrown yet
 		kLane,    // on the lane
 		kGutter,  // in a gutter: rolls on to the pit, never touches a pin
-		kPit,     // gone off the end
+		kPit,     // off the end of the deck: into the slot in front of the back wall, off the wall and away sideways
+		kTaken,   // gone into the machine (out of sight)
 	};
 
 	enum class PinState : std::uint8_t
@@ -136,6 +138,8 @@ namespace bowl
 		double    drift{ 0.0 };       // (this throw's drift, from its Release)
 		double    driftWave{ 0.0 };
 		double    driftPhase{ 0.0 };
+		double    pitTime{ 0.0 };     // (how long it's been in the pit)
+		bool      hitBack{ false };   // (it's hit the back wall)
 		// (for drawing) which way round it is: a lane-frame vector = orient * a vector in the ball's own frame
 		double orient[3][3]{ { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } };
 	};

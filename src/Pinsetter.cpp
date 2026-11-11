@@ -26,9 +26,13 @@ namespace fb
 		constexpr RE::TESFormID kSweepBase = 0x00136005;  // MacDetailGreeble26: a bar 118 long (y), 10 deep, z -4..4
 		constexpr float         kDeckScale = 0.6f;        // -> 125 x 124, 129 tall: over the whole rack
 		constexpr double        kDeckBottom = 21.0 * kDeckScale;  // (its underside below its origin)
-		constexpr float         kSweepScale = 1.9f;       // -> 224, kickback to kickback
+		constexpr float         kSweepScale = 1.84f;      // -> 217: just inside the side walls
 		constexpr double        kSweepBottom = 4.0 * kSweepScale;
 		constexpr double        kSweepHalfDepth = 5.0 * kSweepScale;
+		constexpr RE::TESFormID kTableBase = 0x000F2C32;  // GreenHsCenterRoofTopBeam01: 256 long, 14 deep, z -4..8
+		constexpr float         kTableScale = 0.85f;      // -> 218 across the lane, inside the side walls
+		constexpr double        kTableBottom = 4.0 * kTableScale;
+		constexpr double        kTableGap = 10.0;         // the machine sits this far above the table under it
 		constexpr double        kGrab = 0.8;              // the deck's underside this far above a standing pin's head
 
 		using Keys = std::vector<std::array<double, 2>>;  // (time, value), eased between
@@ -74,7 +78,7 @@ namespace fb
 			const double bar = a_s.sweepHeight;
 			const double grab = a_spec.pinHeight + kGrab;
 			const double front = a_spec.kickbackStart + kSweepHalfDepth + 8.0;
-			const double back = a_spec.deckEnd + 10.0;
+			const double back = std::min(a_spec.deckEnd + 10.0, a_spec.deckEnd + a_spec.pitBack - kSweepHalfDepth - 2.0);  // (short of the back wall)
 			Plan         p;
 			if (a_fresh) {
 				p.sweepZ = { { 0.0, bar }, { 0.5, 1.0 }, { 2.9, 1.0 }, { 3.4, bar } };
@@ -114,6 +118,13 @@ namespace fb
 			return util::NodeRotation(m);
 		}
 
+		// the table under the machine lies across the lane: its long x along the world's y
+		RE::NiMatrix3 AcrossTheLane()
+		{
+			const double m[3][3]{ { 0.0, -1.0, 0.0 }, { 1.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 } };
+			return util::NodeRotation(m);
+		}
+
 		// the bar as it comes: its length along the world's y, which is across the lane
 		RE::NiMatrix3 Straight()
 		{
@@ -150,12 +161,15 @@ namespace fb
 		const auto& s = Settings::Get();
 		_deck = Spawn(deck, lanes::ToWorld(a_lane, s.spec.headPin + 36.0, 0.0, s.deckHeight));
 		_sweep = Spawn(sweep, lanes::ToWorld(a_lane, s.spec.kickbackStart + 20.0, 0.0, s.sweepHeight));
-		_deckPrepared = _sweepPrepared = false;
+		if (auto* table = Piece(kTableBase)) {
+			_table = Spawn(table, lanes::ToWorld(a_lane, s.spec.headPin + 36.0, 0.0, s.deckHeight));
+		}
+		_deckPrepared = _sweepPrepared = _tablePrepared = false;
 	}
 
 	void Game::RemoveMachine()
 	{
-		for (auto* h : { &_deck, &_sweep, &_lights[0], &_lights[1] }) {
+		for (auto* h : { &_deck, &_sweep, &_table, &_lights[0], &_lights[1] }) {
 			if (auto ref = h->get()) {
 				ref->Disable();
 				ref->SetWantsDelete(true);
@@ -267,6 +281,12 @@ namespace fb
 
 		// the deck's middle over the middle of the rack
 		const double rackMiddle = spec.headPin + spec.pinSpacing * 3.0 * 0.866 * 0.5;
+		// the table is the deck's underside (what meets the pins); the machine rides on top of it
+		if (auto table = _table.get()) {
+			Prepare(table.get(), _tablePrepared);
+			PlaceNode(table.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, deckZ + kTableBottom), AcrossTheLane(), false, kTableScale);
+			deckZ += kTableGap;
+		}
 		PlaceNode(deck.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, deckZ + kDeckBottom), MachineFacing(), false, kDeckScale);
 		PlaceNode(sweep.get(), lanes::ToWorld(*_lane, sweepX, 0.0, sweepZ + kSweepBottom), Straight(), false, kSweepScale);
 	}

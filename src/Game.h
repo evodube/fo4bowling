@@ -192,6 +192,8 @@ namespace fb
 		RE::ObjectRefHandle                      _sweep;
 		std::array<RE::ObjectRefHandle, 2>       _lights{};
 		bool                                     _deckPrepared{ false };
+		RE::ObjectRefHandle                      _table;
+		bool                                     _tablePrepared{ false };
 		bool                                     _sweepPrepared{ false };
 		bool                                     _setFresh{ false };
 		std::array<SetPin, 10>                   _setPins{};

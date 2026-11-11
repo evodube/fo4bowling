@@ -125,6 +125,8 @@ namespace fb
 		s.kickback = ReadDouble(L"Physics", L"fKickback", s.kickback);
 		s.kickbackStart = ReadDouble(L"Physics", L"fKickbackStart", s.kickbackStart);
 		s.deckEnd = ReadDouble(L"Physics", L"fDeckEnd", s.deckEnd);
+		s.pitBack = std::max(20.0, ReadDouble(L"Physics", L"fPitBack", s.pitBack));
+		s.pitBackRestitution = std::clamp(ReadDouble(L"Physics", L"fBackWallBounce", s.pitBackRestitution), 0.0, 1.0);
 		s.oilLength = ReadDouble(L"Physics", L"fOilLength", s.oilLength);
 		s.oilFriction = ReadDouble(L"Physics", L"fOilFriction", s.oilFriction);
 		s.dryFriction = ReadDouble(L"Physics", L"fDryFriction", s.dryFriction);

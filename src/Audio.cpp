@@ -16,7 +16,7 @@ namespace fb::Audio
 	namespace
 	{
 		constexpr std::size_t   kVoices = 32;
-		constexpr int           kMaxPinVoices = 8;  // (pins clattering: past this many at once, more just adds mush)
+		constexpr int           kMaxPinVoices = 12;  // (pins clattering: past this many at once, more just adds mush)
 		constexpr std::uint32_t kRate = 44100;
 
 		struct Clip

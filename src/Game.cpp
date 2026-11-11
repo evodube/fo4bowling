@@ -888,8 +888,10 @@ namespace fb
 				// the ball into the rack: the big crash for a full-ish rack hit hard, a lighter hit otherwise
 				if (_sim->TimeSinceThrow() - _lastCrash > 0.35) {
 					_lastCrash = _sim->TimeSinceThrow();
-					if (_rackFullAtThrow && hard > 250.0f) {
-						Audio::Play(Audio::Bank::kCrash, at, std::min(1.0f, 0.6f + hard / 1200.0f));
+					// (into a full-ish rack it's always the crash, the whole clatter of it: the first contact's often a
+					// glancing one, slow along the normal, even on a big hit)
+					if (_rackFullAtThrow) {
+						Audio::Play(Audio::Bank::kCrash, at, std::min(1.0f, 0.7f + hard / 1500.0f));
 					} else {
 						Audio::Play(Audio::Bank::kHit, at, std::min(0.9f, 0.5f + hard / 1200.0f));
 					}
@@ -900,12 +902,12 @@ namespace fb
 			case bowl::Event::Kind::kPinPin:
 			case bowl::Event::Kind::kPinDeck:
 			case bowl::Event::Kind::kPinWall:
-				// (a couple a tick, a few hundredths of a second apart: a clatter, not a buzz)
-				if (hard > 60.0f && pins < 2 && _sim->TimeSinceThrow() - _lastPinSound > 0.03) {
+				// (a few a tick, at least a hundredth and a half of a second apart: a clatter, not a buzz)
+				if (hard > 50.0f && pins < 3 && _sim->TimeSinceThrow() - _lastPinSound > 0.015) {
 					++pins;
 					_lastPinSound = _sim->TimeSinceThrow();
-					const float pitch = e.kind == bowl::Event::Kind::kPinPin ? 1.0f : e.kind == bowl::Event::Kind::kPinDeck ? 0.85f : 0.8f;
-					Audio::Play(Audio::Bank::kPin, at, std::min(0.55f, hard / 900.0f), pitch);
+					const float pitch = e.kind == bowl::Event::Kind::kPinPin ? 1.05f : e.kind == bowl::Event::Kind::kPinDeck ? 0.9f : 0.85f;
+					Audio::Play(Audio::Bank::kPin, at, std::min(0.8f, 0.15f + hard / 600.0f), pitch);
 				}
 				break;
 			case bowl::Event::Kind::kPinPit:
@@ -931,20 +933,45 @@ namespace fb
 		const auto&  spec = _sim->GetSpec();
 		const double dx = std::cos(_aimAngle);
 		const double dy = std::sin(_aimAngle);
-		constexpr int kSteps = 24;
-		for (int i = 0; i <= kSteps; ++i) {
-			const double t = s.guideLength * i / kSteps;
+		// the ball on the screen: its middle and how big it looks. The line is drawn over everything, so the part of it
+		// the ball would hide (the lane just in front of it, seen from behind) is left out: it starts past the ball
+		const auto project = [&](const RE::NiPoint3& a_world, float& a_x, float& a_y) {
+			float z = 0.0f;
+			if (!camera->WorldPtToScreenPt3(a_world, a_x, a_y, z, 1e-5f) || z <= 0.0f) {
+				return false;
+			}
+			if (s.guideFlipY) {
+				a_y = 1.0f - a_y;
+			}
+			return true;
+		};
+		const auto centre = HeldPoint();
+		float      bx = 0.0f, by = 0.0f, tx = 0.0f, ty = 0.0f;
+		float      ballR = 0.0f;
+		if (project(centre, bx, by) && project(centre + RE::NiPoint3{ 0.0f, 0.0f, static_cast<float>(spec.ballRadius) }, tx, ty)) {
+			ballR = std::hypot(tx - bx, ty - by) * 1.08f;  // (a touch more: the screen's wider than tall, and its edge)
+		}
+		// (screen x and y both run 0..1, over a wider span across than down: x is scaled to y's terms)
+		const auto& fr = camera->viewFrustum;
+		const float aspect = std::abs(fr.top - fr.bottom) > 1e-6f ? std::abs((fr.right - fr.left) / (fr.top - fr.bottom)) : 16.0f / 9.0f;
+		const auto  onBall = [&](float a_x, float a_y) {
+			return ballR > 0.0f && std::hypot((a_x - bx) * aspect, a_y - by) < ballR;
+		};
+		constexpr double kFine = 2.0;  // (finely near the ball, to start right at its edge)
+		double           t = 0.0;
+		bool             started = false;
+		while (t <= s.guideLength) {
 			const double x = spec.ballRadius + 2.0 + t * dx;
 			const double y = _releaseY + t * dy;
 			if (std::abs(y) > spec.laneHalfWidth) {
 				break;  // (off the edge: the gutter)
 			}
-			const auto world = lanes::ToWorld(*_lane, x, y, 0.6);
-			float      sx = 0.0f, sy = 0.0f, sz = 0.0f;
-			if (!camera->WorldPtToScreenPt3(world, sx, sy, sz, 1e-5f) || sz <= 0.0f) {
-				continue;  // (behind the camera)
+			float sx = 0.0f, sy = 0.0f;
+			if (project(lanes::ToWorld(*_lane, x, y, 0.6), sx, sy) && (started || !onBall(sx, sy))) {
+				started = true;
+				_guide.push_back({ sx, sy });
 			}
-			_guide.push_back({ sx, s.guideFlipY ? 1.0f - sy : sy });
+			t += started ? std::max(kFine, s.guideLength / 24.0) : kFine;
 		}
 	}
 
@@ -1210,7 +1237,7 @@ namespace fb
 						break;
 					}
 					const auto& sb = _sim->GetBall();
-					if (sb.state == bowl::BallState::kPit) {
+					if (sb.state == bowl::BallState::kTaken) {
 						hidden = true;
 						break;
 					}
@@ -1254,6 +1281,7 @@ namespace fb
 		_hiddenVanilla.clear();
 		_deck = {};
 		_sweep = {};
+		_table = {};
 		_lights = {};
 		_held.clear();  // (they were let go before any save, so the loaded game has them free)
 		_charging = false;

@@ -148,6 +148,7 @@ namespace fb
 					}
 					break;
 				case Phase::kSetting:
+					SettingSounds(_phaseTime - dt, _phaseTime);
 					if (_phaseTime >= SettingLength()) {
 						NextBall(true);
 					}

@@ -9,6 +9,8 @@ namespace fb::Audio
 		kCrash,    // the ball into a full rack
 		kHit,      // the ball into a few pins
 		kPin,      // pin on pin, pin on the deck or a kickback
+		kSweep,    // the pinsetter's sweep: a clank and the bar sliding back
+		kSet,      // the deck setting the pins down (or picking them up)
 		kCount
 	};
 

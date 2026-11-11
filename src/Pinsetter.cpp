@@ -15,6 +15,8 @@
 
 #include "Game.h"
 
+#include "Audio.h"
+
 #include "Settings.h"
 #include "Util.h"
 
@@ -32,7 +34,7 @@ namespace fb
 		constexpr RE::TESFormID kTableBase = 0x000F2C32;  // GreenHsCenterRoofTopBeam01: 256 long, 14 deep, z -4..8
 		constexpr float         kTableScale = 0.85f;      // -> 218 across the lane, inside the side walls
 		constexpr double        kTableBottom = 4.0 * kTableScale;
-		constexpr double        kBladeX = 1060.0;         // where the blade hangs: over the head pin, just past the sweep bar
+		constexpr double        kTableHeight = 12.0 * kTableScale;  // (the blade's height: the machine sits on top of it)
 		constexpr double        kGrab = 0.8;              // the deck's underside this far above a standing pin's head
 
 		using Keys = std::vector<std::array<double, 2>>;  // (time, value), eased between
@@ -162,7 +164,7 @@ namespace fb
 		_deck = Spawn(deck, lanes::ToWorld(a_lane, s.spec.headPin + 36.0, 0.0, s.deckHeight));
 		_sweep = Spawn(sweep, lanes::ToWorld(a_lane, s.spec.kickbackStart + 20.0, 0.0, s.sweepHeight));
 		if (auto* table = Piece(kTableBase)) {
-			_table = Spawn(table, lanes::ToWorld(a_lane, s.spec.kickbackStart + 20.0, 0.0, s.sweepHeight));
+			_table = Spawn(table, lanes::ToWorld(a_lane, s.spec.headPin + 36.0, 0.0, s.deckHeight));
 		}
 		_deckPrepared = _sweepPrepared = _tablePrepared = false;
 	}
@@ -212,6 +214,26 @@ namespace fb
 		}
 		_phase = Phase::kSetting;
 		_phaseTime = 0.0f;
+	}
+
+	void Game::SettingSounds(float a_from, float a_to)
+	{
+		// the machine's sounds, as its moves start: the sweep (its clank and the slide back), and the deck reaching
+		// the deck (picking the standing pins up, and setting them or a new rack down)
+		const auto& spec = _sim->GetSpec();
+		const Plan  plan = MakePlan(_setFresh, spec, Settings::Get());
+		const auto  crossed = [&](double a_t) { return a_t >= 0.0 && a_from < a_t && a_to >= a_t; };
+		const double rackMiddle = spec.headPin + spec.pinSpacing * 1.3;
+		const auto   at = lanes::ToWorld(*_lane, rackMiddle, 0.0, 20.0);
+		if (crossed(plan.pushFrom - 0.08)) {
+			Audio::Play(Audio::Bank::kSweep, lanes::ToWorld(*_lane, spec.kickbackStart + 30.0, 0.0, 10.0), 0.75f);
+		}
+		if (!_setFresh && crossed(plan.holdFrom - 0.1)) {
+			Audio::Play(Audio::Bank::kSet, at, 0.45f, 1.1f);  // (the standing pins taken up)
+		}
+		if (crossed((_setFresh ? plan.newTo : plan.holdTo) - 0.05)) {
+			Audio::Play(Audio::Bank::kSet, at, 0.8f);  // (and set down)
+		}
 	}
 
 	float Game::SettingLength() const
@@ -297,15 +319,16 @@ namespace fb
 			sweepX = At(plan.sweepX, _phaseTime);
 		}
 
-		// the deck's middle over the middle of the rack
+		// the deck's middle over the middle of the rack. Its underside is the yellow blade: what holds the pins as the
+		// deck brings them down (they hang just under it), with the machine on top
 		const double rackMiddle = spec.headPin + spec.pinSpacing * 3.0 * 0.866 * 0.5;
-		PlaceNode(deck.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, deckZ + kDeckBottom), MachineFacing(), false, kDeckScale);
-		PlaceNode(sweep.get(), lanes::ToWorld(*_lane, sweepX, 0.0, sweepZ + kSweepBottom), Straight(), false, kSweepScale);
-		// the first pinsetter's yellow blade, where it sat: above the pins at the sweep's waiting height, and it stays
-		// there (just past the sweep bar, so the bar comes down in front of it)
+		double       machineZ = deckZ;
 		if (auto table = _table.get()) {
 			Prepare(table.get(), _tablePrepared);
-			PlaceNode(table.get(), lanes::ToWorld(*_lane, kBladeX, 0.0, s.sweepHeight + kTableBottom), AcrossTheLane(), false, kTableScale);
+			PlaceNode(table.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, deckZ + kTableBottom), AcrossTheLane(), false, kTableScale);
+			machineZ += kTableHeight;
 		}
+		PlaceNode(deck.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, machineZ + kDeckBottom), MachineFacing(), false, kDeckScale);
+		PlaceNode(sweep.get(), lanes::ToWorld(*_lane, sweepX, 0.0, sweepZ + kSweepBottom), Straight(), false, kSweepScale);
 	}
 }

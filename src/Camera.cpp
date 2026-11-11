@@ -169,9 +169,16 @@ namespace fb
 					look = lanes::ToWorld(*_lane, deck, 0.0, 10.0);
 					ease = 3.0f;
 				} else if (rolling) {
-					// behind the ball, until it's far enough down: then it waits there and watches
-					const double x = std::min(b.pos.x - s.camDistance * 1.2, static_cast<double>(s.followStop));
-					pos = lanes::ToWorld(*_lane, x, b.pos.y * 0.5, s.camHeight + 12.0);
+					// behind the ball, until it's far enough down: then it waits there and watches. It starts where the
+					// aiming camera was (right behind the ball, at its height) and drifts out to its follow spot over the
+					// first moments, so the throw doesn't jolt it
+					const double u0 = std::clamp(_sim->TimeSinceThrow() / 0.9, 0.0, 1.0);
+					const double u = u0 * u0 * (3.0 - 2.0 * u0);
+					const double back = s.camDistance * (1.0 + 0.2 * u);
+					const double up = (s.camHeight + spec.ballRadius) + (12.0 - spec.ballRadius) * u;
+					const double x = std::min(b.pos.x - back, static_cast<double>(s.followStop));
+					const double fromY = AiTurn() ? 0.0 : b.pos.y;  // (an NPC's turn was watched from the middle)
+					pos = lanes::ToWorld(*_lane, x, fromY + (b.pos.y * 0.5 - fromY) * u, up);
 					look = b.pos.x < spec.headPin - 120.0 ? lanes::ToWorld(*_lane, b.pos.x + 80.0, b.pos.y, spec.ballRadius) :
 					                                        lanes::ToWorld(*_lane, deck, 0.0, 10.0);
 					ease = 7.0f;
@@ -287,7 +294,9 @@ namespace fb
 			const RE::NiPoint3 behind = AiTurn() && _lane ? lanes::ToWorld(*_lane, 0.0, 0.0, s.spec.ballRadius) : HeldPoint();
 			const RE::NiPoint3 goal = behind - fwd * s.camDistance + RE::NiPoint3{ 0.0f, 0.0f, s.camHeight };
 			_camPos = _camPlaced ? Ease(_camPos, goal, 6.0f, dt) : goal;
-			_camLook = goal + fwd * 300.0f;
+			// (the point it's looking at, along the same pitch: so when the ball's thrown and the camera starts
+			// following what it looks at, it carries on from exactly this view instead of snapping level)
+			_camLook = _camPos + fwd * (300.0f * std::cos(pitch)) - RE::NiPoint3{ 0.0f, 0.0f, 300.0f * std::sin(pitch) };
 			_camPlaced = true;
 		} else if (_camGoalSet) {
 			_camPos = _camPlaced ? Ease(_camPos, _camGoalPos, _camEase, dt) : _camGoalPos;

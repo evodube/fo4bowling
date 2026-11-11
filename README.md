@@ -41,7 +41,10 @@ Turn it off or down under Sound in the settings, or with `bAnnouncer` and `fAnno
 Your opponents bowl with their own skill and hand (the same every game): each picks the ball up in the middle, walks
 over to their spot, lines up the pocket for a strike or the key pin for a spare, and misses the way people do.
 
-You need [F4SE](https://f4se.silverlock.org/) and the Address Library. The HUD (score sheet, meters, controls, the
+It runs on every PC version from 1.10.163 on: the original game (1.10.163), next-gen (1.10.980 and 1.10.984) and
+the Anniversary Edition updates (1.11.137 to 1.11.240).
+
+You need [F4SE](https://f4se.silverlock.org/) for your game version and the Address Library for it. The HUD (score sheet, meters, controls, the
 strike X) needs F4SE Menu Framework; without it the game still plays and the calls come up as the game's own
 notifications. It comes in four looks: Pip-Boy (Fallout 4's own green HUD, the default), Vault-Tec (1950s blue
 and yellow), RobCo (a green-phosphor terminal) and Modern (smoked glass and amber). Pick one with `[HUD] sStyle`, or
@@ -72,7 +75,7 @@ Settings are in `Data\F4SE\Plugins\fo4bowling.ini`, re-read at the start of ever
 ## Building
 
 GitHub Actions builds it: the Linux job runs the tests, the Windows job builds the DLL with xmake and Dear-Modding
-CommonLibF4 (submodule), targeting Fallout 4 1.10.163. Locally:
+CommonLibF4 (submodule), one DLL for Fallout 4 1.10.163, 1.10.980/984 and 1.11.137 to 1.11.240. Locally:
 
 ```
 g++ -std=c++20 -O2 -Isrc tests/sim_test.cpp src/sim/Sim.cpp -o sim_test && ./sim_test

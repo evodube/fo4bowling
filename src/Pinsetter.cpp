@@ -194,8 +194,8 @@ namespace fb
 			sp.shown = p.state != bowl::PinState::kSwept && !p.frozen;
 			const auto head = sp.base + _sim->PinAxis(i) * spec.pinHeight;
 			sp.minX = std::min(sp.base.x, head.x);
-			sp.onDeck = sp.shown && p.state != bowl::PinState::kGone && std::abs(sp.base.y) < spec.kickback && sp.base.z < 25.0 &&
-			            sp.minX > spec.kickbackStart + 2.0 * kSweepHalfDepth + 6.0 && sp.minX < spec.deckEnd;
+			sp.onDeck = sp.shown && std::abs(sp.base.y) < spec.kickback && sp.base.z < 25.0 &&
+			            sp.minX > spec.kickbackStart + 2.0 * kSweepHalfDepth + 6.0;  // (in the slot at the back too: swept into the pit)
 			sp.standing = p.state == bowl::PinState::kStanding;
 		}
 		const auto& card = _match.CardOf(_match.Bowler());

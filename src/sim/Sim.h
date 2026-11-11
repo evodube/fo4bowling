@@ -80,7 +80,7 @@ namespace bowl
 		double kickback{ 112.0 };       // the side walls round the pin deck, either side of the middle
 		double kickbackStart{ 1024.0 }; // ...from here (the masking wall) to the deck's end
 		double deckEnd{ 1205.0 };       // past this: the pit (a slot in front of the back wall)
-		double pitDepth{ 80.0 };
+		double pitDepth{ 0.0 };         // (the alley's floor runs on to the wall: the slot's floor is level with the deck)
 		double pitBack{ 27.0 };         // the back wall, this far past the deck's end (1232: the cell's own wall)
 		double pitBackRestitution{ 0.45 };  // pins and the ball bounce off it
 		double oilLength{ 700.0 };      // the oiled front of the lane; dry from here on

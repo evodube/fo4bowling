@@ -329,15 +329,24 @@ namespace bowl
 				b.pos.x = _spec.deckEnd + R;  // (the deck's edge keeps it in the slot)
 				b.vel.x = std::max(0.0, b.vel.x);
 			}
-			// rolling along the slot, never quite stopping (the slot runs down to the sides)
-			const double across = std::abs(b.vel.y);
-			if (b.hitBack && across < 80.0) {
-				b.vel.y = (b.vel.y != 0.0 ? (b.vel.y > 0.0 ? 1.0 : -1.0) : (b.pos.y >= 0.0 ? 1.0 : -1.0)) * std::min(80.0, across + 150.0 * a_dt);
+			// off the side walls too, rolling along the slot until it stops there
+			if (std::abs(b.pos.y) + R > _spec.kickback) {
+				const double sy = b.pos.y > 0.0 ? 1.0 : -1.0;
+				b.pos.y = sy * (_spec.kickback - R);
+				if (b.vel.y * sy > 0.0) {
+					if (std::abs(b.vel.y) > 40.0) {
+						AddEvent(Event::Kind::kBallPit, b.pos, std::abs(b.vel.y));
+					}
+					b.vel.y = -0.35 * b.vel.y;
+				}
 			}
 			b.vel.x *= std::max(0.0, 1.0 - 3.0 * a_dt);
+			b.vel.y *= std::max(0.0, 1.0 - 0.9 * a_dt);
 			b.spin = { -b.vel.y / R, b.vel.x / R, 0.0 };
-			if (std::abs(b.pos.y) + R > _spec.kickback || b.pitTime > 4.0) {
-				b.state = BallState::kTaken;
+			if ((b.hitBack && b.vel.Length() < 8.0) || b.pitTime > 6.0) {
+				b.state = BallState::kTaken;  // (at rest in the slot: the machine has it)
+				b.vel = {};
+				b.spin = {};
 			}
 		}
 		if (b.state == BallState::kLane && b.vel.Length() < 3.0 && _sinceThrow > 2.0) {
@@ -745,7 +754,7 @@ namespace bowl
 				if (was != PinState::kGone && p.com.x > s.deckEnd) {
 					AddEvent(Event::Kind::kPinPit, { p.com.x, p.com.y }, p.vel.Length(), i);
 				}
-				if (p.com.z < -s.pitDepth * 0.5) {
+				if (s.pitDepth > 20.0 && p.com.z < -s.pitDepth * 0.5) {
 					p.frozen = true;  // (out of sight at the bottom of the pit)
 					p.asleep = true;
 				}

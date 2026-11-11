@@ -108,8 +108,8 @@ namespace fb::Audio
 			switch (a_bank) {
 			case Bank::kRelease: return 2;
 			case Bank::kRoll: return 1;
-			case Bank::kCrash: return 3;
-			case Bank::kHit: return 4;
+			case Bank::kCrash: return 6;
+			case Bank::kHit: return 6;
 			case Bank::kPin: return 4;
 			default: return 0;
 			}

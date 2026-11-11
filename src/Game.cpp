@@ -21,6 +21,8 @@ namespace fb
 		constexpr float  kPickupSeconds = 0.6f;    // the ball off the return and into your hand
 		constexpr float  kResultSeconds = 1.8f;    // what a ball did stays up this long before the next one
 		constexpr float  kMachineAfter = 0.8f;     // ...or, with the pinsetter, this long before it starts
+		constexpr double kImpactLook = 0.12;       // the crash or the hit is picked this long after the ball meets the pins
+		constexpr int    kCrashPins = 4;           // ...the crash when at least this many pins are going by then
 		constexpr float  kOverSeconds = 3.0f;      // the final scores, then the game packs itself away
 		constexpr float  kReturnDelay = 1.6f;      // a thrown ball spends this long in the machine before it comes back
 		constexpr float  kQuitWindow = 3.0f;       // the quit key twice within this many seconds stops the game
@@ -647,7 +649,8 @@ namespace fb
 		}
 		_aiPlanned = false;
 		_rackFullAtThrow = _sim->StandingCount() >= 6;
-		_lastCrash = -1.0;
+		_impactAt = -1.0;
+		_impactDone = false;
 		_lastPinSound = -1.0;
 		_sim->Throw(r);
 		Audio::Play(Audio::Bank::kRelease, HeldPoint(), 0.35f + 0.65f * power);
@@ -690,7 +693,11 @@ namespace fb
 		if (const int total = _match.CardOf(bowler).Total(); total > 0 || card.Frame() > 0) {
 			sub += std::format("  ·  {}", total);
 		}
-		Banner(title, sub, kResultSeconds + 0.2f);
+		// (the score sheet at the top says it all: the call only goes up as a notification without the HUD, or if asked for)
+		log::info("{}  {}", title, sub);
+		if (Settings::Get().notifications || !Hud::Installed()) {
+			RE::SendHUDMessage::ShowHUDMessage(std::format("{} {}", title, sub).c_str(), nullptr, false, false);
+		}
 		log::info("ball: {} down ({} standing: {}){}", down, standing, PinList(_sim->StandingMask()), split.empty() ? "" : " " + split);
 
 		// the ball goes round the machine and comes back up the return
@@ -737,16 +744,10 @@ namespace fb
 			pick = 1 - _active;  // (both somehow away: take the other one out of the machine)
 		}
 		_active = pick;
-		// whoever's up: a player gets back their own spot, line and spin
-		if (const auto& up = _bowlers[static_cast<std::size_t>(_match.Bowler())]; !up.ai) {
-			_releaseY = up.releaseY;
-			_hook = up.hook;
-			_aimAngle = up.aim;
-		} else {
-			_releaseY = 0.0;  // (an NPC picks the ball up in the middle)
-			_hook = 0.0f;
-			_aimAngle = 0.0f;
-		}
+		// every ball starts in the middle, aimed straight down the lane (an NPC's too: they walk it over themselves)
+		_releaseY = 0.0;
+		_hook = 0.0f;
+		_aimAngle = 0.0f;
 		_aiPlanned = false;
 		auto& ball = _balls[static_cast<std::size_t>(_active)];
 		ball.at = BallAt::kHand;
@@ -877,6 +878,20 @@ namespace fb
 		} else {
 			Audio::StopRoll();
 		}
+		// a moment after the ball meets the pins: a lot of them going is the crash, a few the lighter hit
+		if (_impactAt >= 0.0 && !_impactDone && _sim->TimeSinceThrow() >= _impactAt + kImpactLook) {
+			_impactDone = true;
+			int going = 0;
+			for (const auto& p : _sim->Pins()) {
+				going += (p.state != bowl::PinState::kSwept && !p.asleep && p.vel.Length() > 25.0) ? 1 : 0;
+			}
+			if (going >= kCrashPins) {
+				Audio::Play(Audio::Bank::kCrash, _impactPos, std::min(1.0f, 0.7f + 0.04f * static_cast<float>(going)));
+			} else if (going > 0) {
+				Audio::Play(Audio::Bank::kHit, _impactPos, std::min(1.0f, 0.65f + 0.1f * static_cast<float>(going)));
+			}
+			log::info("the ball set {} pin{} going: {}", going, going == 1 ? "" : "s", going >= kCrashPins ? "crash" : "hit");
+		}
 		int pins = 0;  // (a few clatters a tick is plenty)
 		for (const auto& e : a_events) {
 			const auto  at = lanes::ToWorld(*_lane, e.pos.x, e.pos.y, 12.0);
@@ -886,18 +901,12 @@ namespace fb
 				_lastBallGutter = true;
 				break;
 			case bowl::Event::Kind::kBallPin:
-				// the ball into the rack: the big crash for a full-ish rack hit hard, a lighter hit otherwise
-				if (_sim->TimeSinceThrow() - _lastCrash > 0.35) {
-					_lastCrash = _sim->TimeSinceThrow();
-					// (into a full-ish rack it's always the crash, the whole clatter of it: the first contact's often a
-					// glancing one, slow along the normal, even on a big hit)
-					if (_rackFullAtThrow) {
-						Audio::Play(Audio::Bank::kCrash, at, std::min(1.0f, 0.7f + hard / 1500.0f));
-					} else {
-						Audio::Play(Audio::Bank::kHit, at, std::min(0.9f, 0.5f + hard / 1200.0f));
-					}
-					// (and the crack of the ball on the first pin)
-					Audio::Play(Audio::Bank::kPin, at, std::min(0.7f, 0.3f + hard / 1500.0f), 0.9f);
+				// the ball into the rack: the crack of it now; the crash or the hit once it's clear how many pins it's
+				// set going (below)
+				if (_impactAt < 0.0) {
+					_impactAt = _sim->TimeSinceThrow();
+					_impactPos = at;
+					Audio::Play(Audio::Bank::kPin, at, std::min(0.8f, 0.4f + hard / 1500.0f), 0.95f);
 				}
 				break;
 			case bowl::Event::Kind::kPinPin:
@@ -1238,10 +1247,6 @@ namespace fb
 						break;
 					}
 					const auto& sb = _sim->GetBall();
-					if (sb.state == bowl::BallState::kTaken) {
-						hidden = true;
-						break;
-					}
 					ball.pos = lanes::ToWorld(*_lane, sb.pos.x, sb.pos.y, sb.z);
 					const auto w = lanes::DirToWorld(sb.spin.x, sb.spin.y, sb.spin.z);
 					bowl::RotateBy(ball.orient, { w.x, w.y, w.z }, a_dt);

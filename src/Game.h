@@ -212,7 +212,9 @@ namespace fb
 		float                                    _aimAngle{ 0.0f }; // radians, + left
 		bool                                     _lastBallGutter{ false };
 		bool                                     _rackFullAtThrow{ false };
-		double                                   _lastCrash{ -1.0 };
+		double                                   _impactAt{ -1.0 };  // (when the ball met the pins this throw)
+		bool                                     _impactDone{ false };
+		RE::NiPoint3                             _impactPos{};
 		double                                   _lastPinSound{ -1.0 };
 		std::chrono::steady_clock::time_point    _lastTick{};
 		bool                                     _haveLastTick{ false };

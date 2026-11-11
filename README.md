@@ -35,6 +35,9 @@ The sounds are real bowling alley recordings (CC0, from Freesound; see `Data\Sou
 ball landing and rolling down the lane, the crash into the rack and pins clattering, each heard from where it
 happens.
 
+The alley's PA calls every strike, spare, turkey (three strikes in a row) and gutter ball, for you and your opponents.
+Turn it off or down under Sound in the settings, or with `bAnnouncer` and `fAnnouncerVolume` in the INI.
+
 Your opponents bowl with their own skill and hand (the same every game): each picks the ball up in the middle, walks
 over to their spot, lines up the pocket for a strike or the key pin for a spare, and misses the way people do.
 

@@ -518,6 +518,7 @@ namespace fb
 		}
 		_sim->Rack(s.pinJitter, _rng());
 		_match = bowl::Match(players);
+		_strikeRun.fill(0);
 		_aiPlanned = false;
 
 		// the lane's own pins (and any balls on its return) out of the way; ours in their place
@@ -727,6 +728,16 @@ namespace fb
 		// a strike puts up a big X
 		if (freshRack && down == 10) {
 			Banner("X", _names.size() > 1 ? _names[static_cast<std::size_t>(bowler)] : std::string(), 2.2f);
+		}
+		// and the PA calls it
+		auto& run = _strikeRun[static_cast<std::size_t>(bowler) % _strikeRun.size()];
+		run = freshRack && down == 10 ? run + 1 : 0;
+		if (run > 0) {
+			Audio::Announce(run == 3 ? Audio::Call::kTurkey : Audio::Call::kStrike);
+		} else if (!freshRack && standing == 0) {
+			Audio::Announce(Audio::Call::kSpare);
+		} else if (down == 0 && _lastBallGutter) {
+			Audio::Announce(Audio::Call::kGutter);
 		}
 		// (the score sheet at the top says it all: the call only goes up as a notification without the HUD, or if asked for)
 		log::info("{}  {}", title, sub);

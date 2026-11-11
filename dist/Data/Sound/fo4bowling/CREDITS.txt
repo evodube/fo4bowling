@@ -1,5 +1,5 @@
 The sounds in Data\Sound\fo4bowling are cut from real bowling recordings on Freesound, released under CC0 1.0
-(public domain) except the pinsetter (CC BY 4.0, credited below). They were converted to mono 44.1 kHz, trimmed, faded, de-hissed and levelled for the mod; the hits
+(public domain) except the pinsetter (CC BY 4.0, credited below) and the announcer. They were converted to mono 44.1 kHz, trimmed, faded, de-hissed and levelled for the mod; the hits
 are a pin knock layered with a pin-on-pin clack or two.
 
   crash_1, release_1
@@ -27,3 +27,7 @@ are a pin knock layered with a pin-on-pin clack or two.
       "Keilakoneisto, keilojen nosto / Bowling machine, lifting bowling pins" by YleArkisto (Yle Archives),
       licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); cut, filtered and levelled
       https://freesound.org/people/YleArkisto/sounds/367083/
+  announce_*
+      The alley PA's calls were made for the mod with Chatterbox by Resemble AI (MIT licence,
+      https://github.com/resemble-ai/chatterbox), using a voice from Kokoro (Apache 2.0) as the speaker, then put
+      through a horn-speaker filter and a hall echo. Chatterbox marks its audio with an inaudible Perth watermark.

@@ -72,6 +72,8 @@ namespace fb
 		::WritePrivateProfileStringW(L"Sound", L"bEnabled", sound ? L"1" : L"0", kIniPath);
 		::WritePrivateProfileStringW(L"Sound", L"fVolume", std::format(L"{:.2f}", soundVolume).c_str(), kIniPath);
 		::WritePrivateProfileStringW(L"Sound", L"bPinsetter", pinsetterSound ? L"1" : L"0", kIniPath);
+		::WritePrivateProfileStringW(L"Sound", L"bAnnouncer", announcer ? L"1" : L"0", kIniPath);
+		::WritePrivateProfileStringW(L"Sound", L"fAnnouncerVolume", std::format(L"{:.2f}", announcerVolume).c_str(), kIniPath);
 		::WritePrivateProfileStringW(L"Pinsetter", L"bEnabled", pinsetter ? L"1" : L"0", kIniPath);
 		::WritePrivateProfileStringW(L"Pinsetter", L"bLights", pinLights ? L"1" : L"0", kIniPath);
 		::WritePrivateProfileStringW(L"Pinsetter", L"fLightBrightness", std::format(L"{:.2f}", pinLightBrightness).c_str(), kIniPath);
@@ -125,6 +127,8 @@ namespace fb
 		sound = ReadBool(L"Sound", L"bEnabled", sound);
 		soundVolume = std::clamp(ReadFloat(L"Sound", L"fVolume", soundVolume), 0.0f, 2.0f);
 		pinsetterSound = ReadBool(L"Sound", L"bPinsetter", pinsetterSound);
+		announcer = ReadBool(L"Sound", L"bAnnouncer", announcer);
+		announcerVolume = std::clamp(ReadFloat(L"Sound", L"fAnnouncerVolume", announcerVolume), 0.0f, 2.0f);
 		soundFullDistance = std::max(10.0f, ReadFloat(L"Sound", L"fFullDistance", soundFullDistance));
 		soundMaxDistance = std::max(soundFullDistance + 10.0f, ReadFloat(L"Sound", L"fMaxDistance", soundMaxDistance));
 

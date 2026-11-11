@@ -983,6 +983,8 @@ namespace fb::Hud
 			save(Checkbox("Sounds", &s.sound));
 			slider("Volume", s.soundVolume, 0.0f, 2.0f, "%.2f");
 			save(Checkbox("Pinsetter machine", &s.pinsetterSound));
+			save(Checkbox("Announcer", &s.announcer));
+			slider("Announcer volume", s.announcerVolume, 0.0f, 2.0f, "%.2f");
 
 			Spacing();
 			Text("Lane");

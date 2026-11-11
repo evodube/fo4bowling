@@ -229,6 +229,7 @@ namespace fb
 		std::mt19937                             _rng{ std::random_device{}() };
 		float                                    _aimAngle{ 0.0f }; // radians, + left
 		bool                                     _lastBallGutter{ false };
+		std::array<int, 4>                       _strikeRun{};  // strikes in a row, per bowler (three is a turkey)
 		bool                                     _rackFullAtThrow{ false };
 		double                                   _impactAt{ -1.0 };  // (when the ball met the pins this throw)
 		double                                   _reachedAt{ -1.0 }; // (when it reached the pins or the pit)

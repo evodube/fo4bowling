@@ -22,6 +22,18 @@ namespace fb::Audio
 	// [Sound] volume go on top.
 	void Play(Bank a_bank, const RE::NiPoint3& a_pos, float a_gain, float a_pitch = 1.0f);
 
+	// The alley's PA calling a ball (Data\Sound\fo4bowling\announce_*.wav): heard the same anywhere in the alley,
+	// at the [Sound] volume times the announcer's.
+	enum class Call
+	{
+		kStrike,
+		kSpare,
+		kTurkey,  // a third strike in a row
+		kGutter,
+		kCount
+	};
+	void Announce(Call a_call);
+
 	// The rolling ball: started once, moved and turned up or down every frame, stopped (faded) when it's done.
 	void Roll(const RE::NiPoint3& a_pos, float a_gain, float a_pitch);
 	void StopRoll();

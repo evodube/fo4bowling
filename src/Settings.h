@@ -71,6 +71,8 @@ namespace fb
 		bool  sound{ true };
 		float soundVolume{ 0.8f };
 		bool  pinsetterSound{ true };  // the pinsetter's machine noise
+		bool  announcer{ true };       // the alley's PA calling strikes, spares, turkeys and gutter balls
+		float announcerVolume{ 1.0f };
 		float soundFullDistance{ 300.0f };  // full volume within this far of the camera...
 		float soundMaxDistance{ 3500.0f };  // ...fading to nothing here
 

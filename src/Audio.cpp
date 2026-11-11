@@ -39,6 +39,8 @@ namespace fb::Audio
 		std::array<std::vector<Clip>, static_cast<std::size_t>(Bank::kCount)> g_banks;
 		std::array<Voice, kVoices>                                            g_voices;
 		IXAudio2SourceVoice*                                                  g_roll{ nullptr };
+		std::array<Clip, static_cast<std::size_t>(Call::kCount)>              g_calls;
+		IXAudio2SourceVoice*                                                  g_announcer{ nullptr };
 		bool                                                                  g_rolling{ false };
 		std::optional<std::chrono::steady_clock::time_point>                  g_rollStopAt;  // (faded out, stopped then)
 		RE::NiPoint3                                                          g_ear{};
@@ -119,6 +121,17 @@ namespace fb::Audio
 			}
 		}
 
+		const wchar_t* CallName(Call a_call)
+		{
+			switch (a_call) {
+			case Call::kStrike: return L"strike";
+			case Call::kSpare: return L"spare";
+			case Call::kTurkey: return L"turkey";
+			case Call::kGutter: return L"gutter";
+			default: return L"";
+			}
+		}
+
 		WAVEFORMATEX MonoFormat()
 		{
 			WAVEFORMATEX format{};
@@ -158,6 +171,9 @@ namespace fb::Audio
 			}
 			if (FAILED(g_engine->CreateSourceVoice(&g_roll, &format, 0, 2.0f))) {
 				g_roll = nullptr;
+			}
+			if (FAILED(g_engine->CreateSourceVoice(&g_announcer, &format, 0, 2.0f))) {
+				g_announcer = nullptr;
 			}
 			return true;
 		}
@@ -261,6 +277,11 @@ namespace fb::Audio
 				++loaded;
 			}
 		}
+		for (std::size_t c = 0; c < g_calls.size(); ++c) {
+			if (LoadWav(folder / std::format(L"announce_{}.wav", CallName(static_cast<Call>(c))), g_calls[c])) {
+				++loaded;
+			}
+		}
 		if (loaded == 0) {
 			log::warn("sound: no sounds found in {}", folder.string());
 			return;
@@ -311,6 +332,37 @@ namespace fb::Audio
 		if (SUCCEEDED(v->voice->SubmitSourceBuffer(&buffer))) {
 			v->voice->Start();
 			v->started = std::chrono::steady_clock::now();
+		}
+	}
+
+	void Announce(Call a_call)
+	{
+		const auto& s = Settings::Get();
+		if (!s.sound || !s.announcer || a_call >= Call::kCount) {
+			return;
+		}
+		std::scoped_lock lock(g_lock);
+		const auto& clip = g_calls[static_cast<std::size_t>(a_call)];
+		if (!g_engine || !g_announcer || clip.data.empty()) {
+			return;
+		}
+		// one voice for the PA: a new call cuts off the last (they're seconds apart, so that's only its echo)
+		g_announcer->Stop();
+		g_announcer->FlushSourceBuffers();
+		const float        gain = std::clamp(s.soundVolume * s.announcerVolume, 0.0f, 2.0f) * 0.7071f;  // (centred, equal power)
+		std::vector<float> matrix(g_channels, 0.0f);
+		matrix[0] = g_channels == 1 ? gain / 0.7071f : gain;
+		if (g_channels > 1) {
+			matrix[1] = gain;
+		}
+		XAUDIO2_BUFFER buffer{};
+		buffer.Flags = XAUDIO2_END_OF_STREAM;
+		buffer.AudioBytes = static_cast<UINT32>(clip.data.size());
+		buffer.pAudioData = clip.data.data();
+		g_announcer->SetOutputMatrix(g_master, 1, g_channels, matrix.data());
+		g_announcer->SetFrequencyRatio(1.0f);
+		if (SUCCEEDED(g_announcer->SubmitSourceBuffer(&buffer))) {
+			g_announcer->Start();
 		}
 	}
 

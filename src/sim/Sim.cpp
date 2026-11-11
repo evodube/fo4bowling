@@ -311,8 +311,7 @@ namespace bowl
 
 			if (std::abs(b.pos.y) > _spec.laneHalfWidth) {
 				// over the edge: into the gutter, and straight on down it
-				b.state = BallState::kGutter;
-				b.pos.y = (b.pos.y > 0.0 ? 1.0 : -1.0) * (_spec.laneHalfWidth + _spec.gutterWidth * 0.5);
+				b.state = BallState::kGutter;  // (it rolls over into the channel by the rail: below)
 				AddEvent(Event::Kind::kBallGutter, b.pos, b.vel.Length());
 			}
 		} else if (b.state == BallState::kGutter) {
@@ -321,6 +320,8 @@ namespace bowl
 			b.spin = { 0.0, b.vel.x / R, 0.0 };
 			b.pos += b.vel * a_dt;
 			b.z = std::max(R - _spec.gutterDepth, b.z - 60.0 * a_dt);
+			const double line = (b.pos.y > 0.0 ? 1.0 : -1.0) * _spec.GutterLine();
+			b.pos.y += (line - b.pos.y) * std::min(1.0, 12.0 * a_dt);
 		}
 		if ((b.state == BallState::kLane || b.state == BallState::kGutter) && b.pos.x > _spec.deckEnd + R) {
 			b.state = BallState::kPit;

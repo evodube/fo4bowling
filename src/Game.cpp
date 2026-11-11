@@ -1394,7 +1394,7 @@ namespace fb
 					// drops out of sight into the return
 					const auto&  spec = s.spec;
 					const double side = _sim ? (_sim->GetSpec().returnSide >= 0.0 ? 1.0 : -1.0) : 1.0;
-					const double gy = side * (spec.laneHalfWidth + spec.gutterWidth * 0.5);
+					const double gy = side * spec.GutterLine();
 					const double gz = R - spec.gutterDepth;
 					const double speed = 420.0;
 					double       step = speed * a_dt;

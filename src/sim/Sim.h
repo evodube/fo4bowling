@@ -75,7 +75,7 @@ namespace bowl
 		// the lane
 		double headPin{ 1064.0 };       // foul line to the head pin's spot
 		double laneHalfWidth{ 64.0 };   // the playing surface, either side of the middle
-		double gutterWidth{ 24.0 };     // past the edge: the ball drops into the gutter
+		double gutterWidth{ 38.0 };     // past the edge: the ball drops into the gutter (out to the raised rail at 102)
 		double gutterDepth{ 8.0 };
 		double kickback{ 112.0 };       // the side walls round the pin deck, either side of the middle
 		double kickbackStart{ 1024.0 }; // ...from here (the masking wall) to the deck's end
@@ -83,6 +83,8 @@ namespace bowl
 		double pitDepth{ 0.0 };         // (the alley's floor runs on to the wall: the slot's floor is level with the deck)
 		double pitBack{ 27.0 };         // the back wall, this far past the deck's end (1232: the cell's own wall)
 		double pitBackRestitution{ 0.45 };  // pins and the ball bounce off it
+		// the line a ball runs along in a gutter: in the channel against the outer rail, clear of the lane's edge
+		double GutterLine() const { return laneHalfWidth + gutterWidth - ballRadius - 1.5; }
 		double returnSide{ 0.0 };       // off the back wall the ball heads this way (+1 left, -1 right: the ball return's side; 0: either)
 		double oilLength{ 400.0 };      // the oiled front of the lane; dry from here on
 		double oilFriction{ 0.04 };     // ball-lane sliding friction on oil

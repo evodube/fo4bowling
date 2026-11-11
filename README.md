@@ -5,9 +5,8 @@ nothing in the cell is edited (its precombines and previs stay as they are).
 
 Lanes 3 and 6 are the two without wreckage on them. Walk up to either one's ball return, look at it and press the
 activate key (F). The left and right arrows there pick how many play: solo, or 2 to 4 players, which is you against
-1 to 3 others. Your companions are asked first, then the nearest friendly people (and robots) around the lanes; if
-there aren't enough, the alley's regulars (Sal, Dot and Hank) make up the numbers. The prompt shows who you'd be
-playing. The people you're playing stay where they are until the game's over.
+1 to 3 others. Your companions are asked first, then the nearest friendly people (and robots) around the lanes. The
+prompt shows who you'd be playing, or that there aren't enough people nearby for that many. The people you're playing stay where they are until the game's over.
 
 ## Playing
 

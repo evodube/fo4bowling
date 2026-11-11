@@ -96,16 +96,15 @@ namespace fb
 		void UpdateLook();
 		const lanes::Lane* LookedAtLane() const;
 
-		// who's playing: you alone, or you against 1 to 3 others (companions, then people nearby, then regulars)
+		// who's playing: you alone, or you against 1 to 3 others (companions, then the people nearby)
 		struct Mode
 		{
 			std::string                      label;   // "SOLO", "3 PLAYERS"
 			std::vector<RE::ObjectRefHandle> npcs;    // the people nearby you'd play, in order
-			std::vector<std::string>         names;   // every opponent's name: those people, then any regulars
-			int                              regulars{ 0 };
+			std::vector<std::string>         names;   // their names
+			int                              missing{ 0 };  // how many more people it needs nearby (0: it can start)
 		};
 		static constexpr float kOpponentRange = 1500.0f;  // how near someone has to be to be asked to bowl
-		static constexpr std::array<const char*, 3> kRegulars{ "SAL", "DOT", "HANK" };  // (the alley's regulars, when no one's around)
 		struct Bowler
 		{
 			std::string         name;

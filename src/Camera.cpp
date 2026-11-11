@@ -282,7 +282,9 @@ namespace fb
 			_aimYaw = yaw;
 			pitch = s.camPitch * kDegToRad;
 			const RE::NiPoint3 fwd{ std::sin(yaw), std::cos(yaw), 0.0f };
-			const RE::NiPoint3 goal = HeldPoint() - fwd * s.camDistance + RE::NiPoint3{ 0.0f, 0.0f, s.camHeight };
+			// (on an NPC's turn it stays in the middle of the lane, so you watch them carry the ball over to their spot)
+			const RE::NiPoint3 behind = AiTurn() && _lane ? lanes::ToWorld(*_lane, 0.0, 0.0, s.spec.ballRadius) : HeldPoint();
+			const RE::NiPoint3 goal = behind - fwd * s.camDistance + RE::NiPoint3{ 0.0f, 0.0f, s.camHeight };
 			_camPos = _camPlaced ? Ease(_camPos, goal, 6.0f, dt) : goal;
 			_camLook = goal + fwd * 300.0f;
 			_camPlaced = true;

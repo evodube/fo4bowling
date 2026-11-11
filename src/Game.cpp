@@ -246,7 +246,12 @@ namespace fb
 					_lookTime = {};  // (the prompt shows it at once)
 				}
 				if (activatePressed) {
-					StartGame(*_lookLane, _modes[static_cast<std::size_t>(std::clamp(_mode, 0, static_cast<int>(_modes.size()) - 1))]);
+					const auto& mode = _modes[static_cast<std::size_t>(std::clamp(_mode, 0, static_cast<int>(_modes.size()) - 1))];
+					if (mode.missing > 0) {
+						Say(std::format("Bowling: {} needs {} people nearby to play against", mode.label, mode.missing + mode.npcs.size()));
+					} else {
+						StartGame(*_lookLane, mode);
+					}
 				}
 			}
 			return;
@@ -322,7 +327,10 @@ namespace fb
 			const Mode* mode = _modes.empty() ? nullptr : &_modes[static_cast<std::size_t>(_mode)];
 			_hud.promptSub = std::format("<  {}  >     LANE {}", mode ? mode->label : std::string("SOLO"), _lookLane->number);
 			_hud.promptVs.clear();
-			if (mode && !mode->names.empty()) {
+			if (mode && mode->missing > 0) {
+				const int found = static_cast<int>(mode->npcs.size());
+				_hud.promptVs = found == 0 ? std::string("NO ONE NEARBY TO PLAY") : std::format("ONLY {} NEARBY TO PLAY", found);
+			} else if (mode && !mode->names.empty()) {
 				_hud.promptVs = "VS ";
 				for (std::size_t i = 0; i < mode->names.size(); ++i) {
 					_hud.promptVs += (i ? ", " : "") + mode->names[i];
@@ -453,14 +461,11 @@ namespace fb
 			_bowlers.push_back(b);
 			log::info("{} ({:08X}) bowls: skill {:.2f}, {}-handed", b.name, a_id, b.skill, b.leftHanded ? "left" : "right");
 		};
-		for (std::size_t i = 0; i < a_mode.names.size() && _bowlers.size() < 4; ++i) {
-			auto  ref = i < a_mode.npcs.size() ? a_mode.npcs[i].get() : RE::NiPointer<RE::TESObjectREFR>{};
+		for (const auto& h : a_mode.npcs) {
+			auto  ref = h.get();
 			auto* actor = ref ? ref->As<RE::Actor>() : nullptr;
-			if (actor && !actor->IsDead(false) && !actor->IsDisabled()) {
-				addAi(NameOf(actor), actor->GetFormID(), a_mode.npcs[i]);
-			} else {
-				// (a regular: no one in the world, just a name on the sheet)
-				addAi(a_mode.names[i], 0x100u + static_cast<std::uint32_t>(i) * 977u + static_cast<std::uint32_t>(a_mode.names[i].size()), {});
+			if (actor && !actor->IsDead(false) && !actor->IsDisabled() && _bowlers.size() < 4) {
+				addAi(NameOf(actor), actor->GetFormID(), h);
 			}
 		}
 		HoldOpponents(true);
@@ -789,7 +794,7 @@ namespace fb
 	void Game::BuildModes()
 	{
 		// solo, or you against 1 to 3 others: your companions first, then the nearest friendly people (and robots)
-		// around the lanes; anyone short is made up by one of the alley's regulars
+		// around the lanes. A mode with too few people nearby is shown but can't start
 		static auto* companionFaction = RE::TESForm::GetFormByID<RE::TESFaction>(0x00023C01);  // CurrentCompanionFaction
 		static auto* npcType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x00013794);           // ActorTypeNPC
 		static auto* robotType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x0002CB73);         // ActorTypeRobot
@@ -833,8 +838,7 @@ namespace fb
 					m.npcs.push_back(nearby[static_cast<std::size_t>(o)].actor->GetHandle());
 					m.names.push_back(NameOf(nearby[static_cast<std::size_t>(o)].actor));
 				} else {
-					++m.regulars;
-					m.names.push_back(kRegulars[static_cast<std::size_t>(o)]);
+					++m.missing;
 				}
 			}
 			modes.push_back(std::move(m));

@@ -176,6 +176,28 @@ int main()
 		Check(s.StandingMask() == called, "and the sweep keeps exactly the pins called standing");
 	}
 
+	{
+		// a pin that's gone down stays down for the ball, even if it bounces or spins back up onto its base
+		bool rose = false;
+		int  throws = 0;
+		for (int k = 0; k < 40; ++k) {
+			Release r;
+			r.y = -14.0 + 0.7 * k;
+			r.speed = 520.0 + 6.0 * k;
+			r.angle = 0.004 * ((k % 5) - 2);
+			Sim s;
+			s.Throw(r);
+			std::uint32_t everDown = 0;
+			while (!s.Settled() && s.TimeSinceThrow() < 12.0) {
+				s.Step();
+				everDown |= 0x3FFu & ~s.StandingMask();
+				rose = rose || (s.StandingMask() & everDown);
+			}
+			++throws;
+		}
+		Check(throws == 40 && !rose, "a pin once down never counts as standing again");
+	}
+
 	for (const double side : { 1.0, -1.0 }) {
 		// with the ball return's side set, the ball always comes off the back wall that way
 		Spec spec;

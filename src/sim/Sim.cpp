@@ -21,6 +21,7 @@ namespace bowl
 		constexpr double kSleepSpin = 0.6;       // ...turning this slowly...
 		constexpr double kSleepAfter = 0.3;      // ...for this long goes to sleep
 		constexpr double kUprightCos = 0.866;    // within 30 degrees of upright counts as standing
+		constexpr double kTippedCos = 0.970;     // past 14 degrees (its base tips at about 10) a pin can't stay up on its own
 	}
 
 	// ---------------------------------------------------------------- vectors
@@ -204,7 +205,9 @@ namespace bowl
 			if (p.frozen || p.state == PinState::kSwept) {
 				continue;
 			}
-			if (p.state == PinState::kStanding && PinUpright(p)) {
+			// (one still going over when it's called, leaning past where it could stay up, is down; it isn't stood
+			// back up)
+			if (p.state == PinState::kStanding && PinUpright(p) && p.rot.Rotate({ 0.0, 0.0, 1.0 }).z > kTippedCos) {
 				const Vec3 fwd = p.rot.Rotate({ 1.0, 0.0, 0.0 });
 				StandPin(p, { p.com.x, p.com.y }, std::atan2(fwd.y, fwd.x));
 			} else {
@@ -783,7 +786,8 @@ namespace bowl
 					p.asleep = true;
 				}
 			} else {
-				p.state = PinUpright(p) ? PinState::kStanding : PinState::kDown;
+				// once down, down for this ball: a pin that falls and bounces or spins back onto its base still counts
+				p.state = was != PinState::kStanding || !PinUpright(p) ? PinState::kDown : PinState::kStanding;
 			}
 		}
 	}

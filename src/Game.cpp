@@ -524,7 +524,6 @@ namespace fb
 		_balls[1].target = s.returnSpot1;  // the other one rolls up behind it
 		EnterCamera();
 		BlockControls(true);
-		Banner(std::format("LANE {}", a_lane.number), players == 1 ? std::string("FRAME 1") : a_mode.label + "  ·  FRAME 1", 2.0f);
 		log::info("game on lane {}: {}", a_lane.number, a_mode.label);
 	}
 
@@ -761,10 +760,6 @@ namespace fb
 		}
 		_phase = Phase::kPickup;
 		_phaseTime = 0.0f;
-		if (card.FreshRack() && card.BallInFrame() == 0) {
-			const std::string who = _names.size() > 1 ? _names[static_cast<std::size_t>(_match.Bowler())] + "  ·  " : std::string();
-			Banner(std::format("FRAME {}", card.Frame() + 1), who + std::format("{}", card.Total()), 1.4f);
-		}
 	}
 
 	bool Game::AiTurn() const

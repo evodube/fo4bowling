@@ -32,7 +32,7 @@ namespace fb
 		constexpr RE::TESFormID kTableBase = 0x000F2C32;  // GreenHsCenterRoofTopBeam01: 256 long, 14 deep, z -4..8
 		constexpr float         kTableScale = 0.85f;      // -> 218 across the lane, inside the side walls
 		constexpr double        kTableBottom = 4.0 * kTableScale;
-		constexpr double        kBladeGap = 1.0;          // (it rides on top of the sweep bar, this far above it)
+		constexpr double        kBladeX = 1060.0;         // where the blade hangs: over the head pin, just past the sweep bar
 		constexpr double        kGrab = 0.8;              // the deck's underside this far above a standing pin's head
 
 		using Keys = std::vector<std::array<double, 2>>;  // (time, value), eased between
@@ -118,7 +118,7 @@ namespace fb
 			return util::NodeRotation(m);
 		}
 
-		// the blade on the sweep lies across the lane: its long x along the world's y
+		// the blade over the pins lies across the lane: its long x along the world's y
 		RE::NiMatrix3 AcrossTheLane()
 		{
 			const double m[3][3]{ { 0.0, -1.0, 0.0 }, { 1.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 } };
@@ -301,11 +301,11 @@ namespace fb
 		const double rackMiddle = spec.headPin + spec.pinSpacing * 3.0 * 0.866 * 0.5;
 		PlaceNode(deck.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, deckZ + kDeckBottom), MachineFacing(), false, kDeckScale);
 		PlaceNode(sweep.get(), lanes::ToWorld(*_lane, sweepX, 0.0, sweepZ + kSweepBottom), Straight(), false, kSweepScale);
-		// the first pinsetter's flat blade, in front of the pins as it was: on top of the sweep bar, moving with it
+		// the first pinsetter's yellow blade, where it sat: above the pins at the sweep's waiting height, and it stays
+		// there (just past the sweep bar, so the bar comes down in front of it)
 		if (auto table = _table.get()) {
 			Prepare(table.get(), _tablePrepared);
-			const double top = sweepZ + 2.0 * kSweepBottom + kBladeGap;
-			PlaceNode(table.get(), lanes::ToWorld(*_lane, sweepX, 0.0, top + kTableBottom), AcrossTheLane(), false, kTableScale);
+			PlaceNode(table.get(), lanes::ToWorld(*_lane, kBladeX, 0.0, s.sweepHeight + kTableBottom), AcrossTheLane(), false, kTableScale);
 		}
 	}
 }

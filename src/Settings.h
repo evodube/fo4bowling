@@ -78,6 +78,7 @@ namespace fb
 		bool          pinLights{ true };               // lights over the pins while a game's on
 		std::uint32_t pinLightForm{ 0x0010C56A };      // the light used (instituteLightWarm01NS: warm, bright, no shadows)
 		float         pinLightHeight{ 70.0f };         // how high they hang over the lane
+		float         pinLightBrightness{ 0.85f };     // their strength, as a share of the light's own
 
 		// [HUD]
 		float hudScale{ 1.0f };

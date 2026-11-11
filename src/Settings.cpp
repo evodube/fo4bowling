@@ -113,6 +113,7 @@ namespace fb
 		pinLights = ReadBool(L"Pinsetter", L"bLights", pinLights);
 		pinLightForm = static_cast<std::uint32_t>(ReadInt(L"Pinsetter", L"iLight", pinLightForm));
 		pinLightHeight = std::clamp(ReadFloat(L"Pinsetter", L"fLightHeight", pinLightHeight), 10.0f, 400.0f);
+		pinLightBrightness = std::clamp(ReadFloat(L"Pinsetter", L"fLightBrightness", pinLightBrightness), 0.0f, 4.0f);
 
 		hudScale = std::clamp(ReadFloat(L"HUD", L"fScale", hudScale), 0.3f, 3.0f);
 		notifications = ReadBool(L"HUD", L"bNotifications", notifications);

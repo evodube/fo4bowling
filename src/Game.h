@@ -147,6 +147,7 @@ namespace fb
 		float SettingLength() const;
 		bool  SettingPinPose(int a_pin, bowl::Vec3& a_base, double a_rot[3][3]) const;  // false: out of sight
 		void  DrawMachine();
+		void  DimLights();
 		void Banner(const std::string& a_title, const std::string& a_sub, float a_seconds);
 		void Say(const std::string& a_message);
 

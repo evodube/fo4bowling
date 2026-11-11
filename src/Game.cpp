@@ -182,6 +182,7 @@ namespace fb
 			}
 			DrawPins();
 			DrawMachine();
+			DimLights();
 			DrawBalls(paused ? 0.0f : dt);
 			UpdateCameraGoal(paused ? 0.0f : dt);
 			UpdateGuide();

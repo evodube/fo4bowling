@@ -255,6 +255,24 @@ namespace fb
 		return true;
 	}
 
+	void Game::DimLights()
+	{
+		// the lights at [Pinsetter] fLightBrightness of their own strength: what the light's drawn at, and what it
+		// fades towards (kept to every frame, in case the game sets it back)
+		const float k = Settings::Get().pinLightBrightness;
+		for (auto& h : _lights) {
+			auto  ref = h.get();
+			auto* base = ref ? ref->GetObjectReference() : nullptr;
+			auto* extra = ref && ref->extraList ? ref->extraList->GetByType<RE::ExtraLight>() : nullptr;
+			if (!base || base->GetFormType() != RE::ENUM_FORM_ID::kLIGH || !extra || !extra->lightdata.light) {
+				continue;
+			}
+			const float want = static_cast<RE::TESObjectLIGH*>(base)->fade * k;
+			extra->lightdata.wantDimmer = want;
+			extra->lightdata.light->dimmer = want;
+		}
+	}
+
 	void Game::DrawMachine()
 	{
 		if (!_lane || !_sim) {

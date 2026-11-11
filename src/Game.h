@@ -142,6 +142,8 @@ namespace fb
 		void EndGame(const std::string& a_why);
 		void Throw(float a_power, bool a_ai);
 		void BallSettled();
+		// the X and the PA's call: as soon as the last pin goes down for a strike or spare, else when the ball's scored
+		void CallBall(bool a_freshRack, int a_down, int a_standing);
 		void NextBall(bool a_racked = false);  // (a_racked: the pinsetter has already swept or racked)
 
 		// ------------------------------------------------ the pinsetter (Pinsetter.cpp)
@@ -233,6 +235,8 @@ namespace fb
 		bool                                     _rackFullAtThrow{ false };
 		double                                   _impactAt{ -1.0 };  // (when the ball met the pins this throw)
 		double                                   _reachedAt{ -1.0 }; // (when it reached the pins or the pit)
+		double                                   _allDownAt{ -1.0 }; // (since when every pin's been down, this ball)
+		bool                                     _called{ false };   // (the X and the PA have had their say this ball)
 		bool                                     _ballLingers{ false };  // (the thrown ball still shows where it stopped)
 		bool                                     _impactDone{ false };
 		RE::NiPoint3                             _impactPos{};

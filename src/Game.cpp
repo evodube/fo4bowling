@@ -25,6 +25,7 @@ namespace fb
 		constexpr int    kCrashPins = 4;           // ...the crash when at least this many pins are going by then
 		constexpr float  kOverSeconds = 3.0f;      // the final scores, then the game packs itself away
 		constexpr float  kReturnDelay = 1.6f;      // a thrown ball spends this long in the machine before it comes back
+		constexpr double kAllDownHold = 0.12;     // every pin down this long (not just one rocking past upright): it's called
 		constexpr double kCallAfter = 2.4;         // the ball's called this long after it reaches the pins, whatever's still moving
 		constexpr float  kQuitWindow = 3.0f;       // the quit key twice within this many seconds stops the game
 		constexpr float  kAiStandSeconds = 0.5f;   // an NPC stands in the middle with the ball this long, then walks to their spot
@@ -141,6 +142,16 @@ namespace fb
 						if (_reachedAt < 0.0 && (sb.pos.x > _sim->GetSpec().kickbackStart || sb.state == bowl::BallState::kPit ||
 													sb.state == bowl::BallState::kTaken)) {
 							_reachedAt = _sim->TimeSinceThrow();
+						}
+						// the last pin down: the X and the call straight away, while the pins are still flying
+						if (!_called && _sim->StandingCount() == 0) {
+							if (_allDownAt < 0.0) {
+								_allDownAt = _sim->TimeSinceThrow();
+							} else if (_sim->TimeSinceThrow() - _allDownAt >= kAllDownHold) {
+								CallBall(_match.CardOf(_match.Bowler()).PinsUp() == 10, _sim->DownThisBall(), 0);
+							}
+						} else {
+							_allDownAt = -1.0;
 						}
 						const bool due = _reachedAt >= 0.0 && _sim->TimeSinceThrow() - _reachedAt >= kCallAfter;
 						if (_sim->Settled() || due) {
@@ -682,6 +693,8 @@ namespace fb
 		_rackFullAtThrow = _sim->StandingCount() >= 6;
 		_impactAt = -1.0;
 		_reachedAt = -1.0;
+		_allDownAt = -1.0;
+		_called = false;
 		_impactDone = false;
 		_lastPinSound = -1.0;
 		_sim->Throw(r);
@@ -695,6 +708,30 @@ namespace fb
 			_names[static_cast<std::size_t>(_match.Bowler())], r.y, r.angle * 180.0 / kPi, power * 100.0f, r.speed, hook, r.axis * 180.0 / kPi, r.revs,
 			r.drift, r.driftWave);
 		_swingHook = 0.0f;
+	}
+
+	void Game::CallBall(bool a_freshRack, int a_down, int a_standing)
+	{
+		if (_called) {
+			return;
+		}
+		_called = true;
+		const int  bowler = _match.Bowler();
+		const bool strike = a_freshRack && a_standing == 0;
+		// a strike puts up a big X
+		if (strike) {
+			Banner("X", _names.size() > 1 ? _names[static_cast<std::size_t>(bowler)] : std::string(), 2.2f);
+		}
+		// and the PA calls it
+		auto& run = _strikeRun[static_cast<std::size_t>(bowler) % _strikeRun.size()];
+		run = strike ? run + 1 : 0;
+		if (run > 0) {
+			Audio::Announce(run == 3 ? Audio::Call::kTurkey : Audio::Call::kStrike);
+		} else if (!a_freshRack && a_standing == 0) {
+			Audio::Announce(Audio::Call::kSpare);
+		} else if (a_down == 0 && _lastBallGutter) {
+			Audio::Announce(Audio::Call::kGutter);
+		}
 	}
 
 	void Game::BallSettled()
@@ -725,20 +762,7 @@ namespace fb
 		if (const int total = _match.CardOf(bowler).Total(); total > 0 || card.Frame() > 0) {
 			sub += std::format("  ·  {}", total);
 		}
-		// a strike puts up a big X
-		if (freshRack && down == 10) {
-			Banner("X", _names.size() > 1 ? _names[static_cast<std::size_t>(bowler)] : std::string(), 2.2f);
-		}
-		// and the PA calls it
-		auto& run = _strikeRun[static_cast<std::size_t>(bowler) % _strikeRun.size()];
-		run = freshRack && down == 10 ? run + 1 : 0;
-		if (run > 0) {
-			Audio::Announce(run == 3 ? Audio::Call::kTurkey : Audio::Call::kStrike);
-		} else if (!freshRack && standing == 0) {
-			Audio::Announce(Audio::Call::kSpare);
-		} else if (down == 0 && _lastBallGutter) {
-			Audio::Announce(Audio::Call::kGutter);
-		}
+		CallBall(freshRack, down, standing);  // (unless the last pin going down already called it)
 		// (the score sheet at the top says it all: the call only goes up as a notification without the HUD, or if asked for)
 		log::info("{}  {}", title, sub);
 		if (Settings::Get().notifications || !Hud::Installed()) {

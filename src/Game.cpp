@@ -889,10 +889,12 @@ namespace fb
 				if (_sim->TimeSinceThrow() - _lastCrash > 0.35) {
 					_lastCrash = _sim->TimeSinceThrow();
 					if (_rackFullAtThrow && hard > 250.0f) {
-						Audio::Play(Audio::Bank::kCrash, at, std::min(0.85f, 0.45f + hard / 1500.0f));
+						Audio::Play(Audio::Bank::kCrash, at, std::min(1.0f, 0.6f + hard / 1200.0f));
 					} else {
-						Audio::Play(Audio::Bank::kHit, at, std::min(0.7f, 0.3f + hard / 1500.0f));
+						Audio::Play(Audio::Bank::kHit, at, std::min(0.9f, 0.5f + hard / 1200.0f));
 					}
+					// (and the crack of the ball on the first pin)
+					Audio::Play(Audio::Bank::kPin, at, std::min(0.7f, 0.3f + hard / 1500.0f), 0.9f);
 				}
 				break;
 			case bowl::Event::Kind::kPinPin:

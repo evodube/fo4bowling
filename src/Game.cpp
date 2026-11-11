@@ -694,6 +694,10 @@ namespace fb
 		if (const int total = _match.CardOf(bowler).Total(); total > 0 || card.Frame() > 0) {
 			sub += std::format("  ·  {}", total);
 		}
+		// a strike puts up a big X
+		if (freshRack && down == 10) {
+			Banner("X", _names.size() > 1 ? _names[static_cast<std::size_t>(bowler)] : std::string(), 2.2f);
+		}
 		// (the score sheet at the top says it all: the call only goes up as a notification without the HUD, or if asked for)
 		log::info("{}  {}", title, sub);
 		if (Settings::Get().notifications || !Hud::Installed()) {

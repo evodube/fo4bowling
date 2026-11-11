@@ -243,10 +243,11 @@ namespace fb::Hud
 			}
 			const float cx = a_v.w * 0.5f;
 			const float y = a_v.h * 0.30f;
-			const bool  big = a_st.banner == "STRIKE!" || a_st.banner == "SPARE!" || a_st.banner == "GAME OVER";
-			const float size = big ? 60.0f : 42.0f;
+			const bool  strikes = a_st.banner == "X";  // (a strike)
+			const bool  big = strikes || a_st.banner == "STRIKE!" || a_st.banner == "SPARE!" || a_st.banner == "GAME OVER";
+			const float size = strikes ? 76.0f : big ? 60.0f : 42.0f;
 			const float w = std::max(TextWidth(a_st.banner, size), TextWidth(a_st.bannerSub, 18.0f)) + 60.0f;
-			Box(a_v, cx - w * 0.5f, y - 12.0f, w, size + 46.0f, Fade(kPanel, a), Fade(kLine, a), 6.0f);
+			Box(a_v, cx - w * 0.5f, y - 12.0f, w, size + (a_st.bannerSub.empty() ? 24.0f : 46.0f), Fade(kPanel, a), Fade(kLine, a), 6.0f);
 			Print(a_v, a_st.banner, cx, y, size, Fade(big ? kHot : kBright, a), Align::kCentre);
 			Print(a_v, a_st.bannerSub, cx, y + size + 6.0f, 18.0f, Fade(kText, a), Align::kCentre);
 		}

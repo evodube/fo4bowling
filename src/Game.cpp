@@ -20,6 +20,7 @@ namespace fb
 		constexpr float  kMaxFrame = 0.05f;        // longer frames (hitches) are clamped
 		constexpr float  kPickupSeconds = 0.6f;    // the ball off the return and into your hand
 		constexpr float  kResultSeconds = 1.8f;    // what a ball did stays up this long before the next one
+		constexpr float  kMachineAfter = 0.8f;     // ...or, with the pinsetter, this long before it starts
 		constexpr float  kOverSeconds = 3.0f;      // the final scores, then the game packs itself away
 		constexpr float  kReturnDelay = 1.6f;      // a thrown ball spends this long in the machine before it comes back
 		constexpr float  kQuitWindow = 3.0f;       // the quit key twice within this many seconds stops the game
@@ -136,8 +137,17 @@ namespace fb
 					}
 					break;
 				case Phase::kResult:
-					if (_phaseTime >= kResultSeconds) {
+					if (!_match.Over() && MachineOn()) {
+						if (_phaseTime >= kMachineAfter) {
+							StartSetting();
+						}
+					} else if (_phaseTime >= kResultSeconds) {
 						NextBall();
+					}
+					break;
+				case Phase::kSetting:
+					if (_phaseTime >= SettingLength()) {
+						NextBall(true);
 					}
 					break;
 				case Phase::kOver:
@@ -171,6 +181,7 @@ namespace fb
 				return;  // (the game ended this tick)
 			}
 			DrawPins();
+			DrawMachine();
 			DrawBalls(paused ? 0.0f : dt);
 			UpdateCameraGoal(paused ? 0.0f : dt);
 			UpdateGuide();
@@ -182,6 +193,7 @@ namespace fb
 			std::scoped_lock lock(_hudMutex);
 			h.prompt = _hud.prompt;
 			h.promptSub = _hud.promptSub;
+			h.promptVs = _hud.promptVs;
 		}
 		if (_phase != Phase::kNone) {
 			const auto& s = Settings::Get();
@@ -481,6 +493,7 @@ namespace fb
 
 		// the lane's own pins (and any balls on its return) out of the way; ours in their place
 		HideVanilla(a_lane);
+		SpawnMachine(a_lane);
 		for (int i = 0; i < bowl::Sim::kPins; ++i) {
 			const auto spot = _sim->Spot(i);
 			_pins[static_cast<std::size_t>(i)] = Spawn(pinBase, lanes::ToWorld(a_lane, spot.x, spot.y, 0.0));
@@ -566,6 +579,7 @@ namespace fb
 			remove(b.ref);
 		}
 		RestoreVanilla();
+		RemoveMachine();
 		HoldOpponents(false);
 		Audio::StopRoll();
 		_charging = false;
@@ -686,7 +700,7 @@ namespace fb
 		_phaseTime = 0.0f;
 	}
 
-	void Game::NextBall()
+	void Game::NextBall(bool a_racked)
 	{
 		const auto& s = Settings::Get();
 		if (_match.Over()) {
@@ -703,7 +717,9 @@ namespace fb
 			return;
 		}
 		const auto& card = _match.CardOf(_match.Bowler());
-		if (card.FreshRack()) {
+		if (a_racked) {
+			// (the pinsetter's done it)
+		} else if (card.FreshRack()) {
 			_sim->Rack(Settings::Get().pinJitter, _rng());
 		} else {
 			_sim->Sweep();
@@ -1003,7 +1019,7 @@ namespace fb
 		a_done = true;
 	}
 
-	void Game::PlaceNode(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_pos, const RE::NiMatrix3& a_rot, bool a_hidden)
+	void Game::PlaceNode(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_pos, const RE::NiMatrix3& a_rot, bool a_hidden, float a_scale)
 	{
 		auto* root = a_ref ? a_ref->Get3D() : nullptr;
 		if (!root) {
@@ -1022,11 +1038,11 @@ namespace fb
 			const float ps = p.scale != 0.0f ? p.scale : 1.0f;
 			local.rotate = a_rot * p.rotate.Transpose();
 			local.translate = (p.rotate * (a_pos - p.translate)) * (1.0f / ps);
-			local.scale = 1.0f / ps;
+			local.scale = a_scale / ps;
 		} else {
 			local.rotate = a_rot;
 			local.translate = a_pos;
-			local.scale = 1.0f;
+			local.scale = a_scale;
 		}
 		root->SetLocalTransform(local);
 		RE::NiUpdateData update;
@@ -1117,10 +1133,14 @@ namespace fb
 			Prepare(ref.get(), _pinPrepared[static_cast<std::size_t>(i)]);
 			const auto& p = _sim->Pins()[static_cast<std::size_t>(i)];
 			// swept away, or down at the bottom of the pit: out of sight
-			const bool hidden = p.state == bowl::PinState::kSwept || p.frozen;
+			bool       hidden = p.state == bowl::PinState::kSwept || p.frozen;
 			bowl::Vec3 base;
 			double     lane[3][3], world[3][3];
-			_sim->PinPose(i, base, lane);
+			if (_phase == Phase::kSetting) {
+				hidden = !SettingPinPose(i, base, lane);  // (where the pinsetter has it)
+			} else {
+				_sim->PinPose(i, base, lane);
+			}
 			for (int r = 0; r < 3; ++r) {
 				const double flip = r < 2 ? -1.0 : 1.0;  // the lane frame is the world turned half round
 				for (int c = 0; c < 3; ++c) {
@@ -1230,6 +1250,8 @@ namespace fb
 			b = {};
 		}
 		_hiddenVanilla.clear();
+		_deck = {};
+		_sweep = {};
 		_held.clear();  // (they were let go before any save, so the loaded game has them free)
 		_charging = false;
 		_inCamera = false;

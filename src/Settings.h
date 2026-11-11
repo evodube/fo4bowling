@@ -71,6 +71,11 @@ namespace fb
 		float soundFullDistance{ 300.0f };  // full volume within this far of the camera...
 		float soundMaxDistance{ 3500.0f };  // ...fading to nothing here
 
+		// [Pinsetter] our own sweep bar and deck over the pins
+		bool  pinsetter{ true };
+		float deckHeight{ 110.0f };   // where the deck waits, its underside above the lane
+		float sweepHeight{ 100.0f };  // where the sweep bar waits
+
 		// [HUD]
 		float hudScale{ 1.0f };
 		bool  notifications{ false };  // calls ("Strike!") as the game's own corner notifications too

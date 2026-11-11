@@ -66,6 +66,7 @@ namespace fb
 			kAiming,
 			kRolling,   // the ball's on its way and the pins are flying
 			kResult,    // what that ball did, for a moment
+			kSetting,   // the pinsetter sweeps and sets
 			kOver,      // the final scores, for a moment
 		};
 
@@ -127,14 +128,32 @@ namespace fb
 		void EndGame(const std::string& a_why);
 		void Throw(float a_power, bool a_ai);
 		void BallSettled();
-		void NextBall();
+		void NextBall(bool a_racked = false);  // (a_racked: the pinsetter has already swept or racked)
+
+		// ------------------------------------------------ the pinsetter (Pinsetter.cpp)
+		struct SetPin
+		{
+			bowl::Vec3 base;          // where it was when the machine started (lane frame)
+			double     rot[3][3]{};
+			double     minX{ 0.0 };   // its nearest point to the bowler
+			bool       shown{ false };
+			bool       onDeck{ false };    // (on the deck in front of the sweep: pushed back into the pit)
+			bool       standing{ false };  // (a second ball's to come: lifted and set down again)
+		};
+		void  SpawnMachine(const lanes::Lane& a_lane);
+		void  RemoveMachine();
+		bool  MachineOn() const;
+		void  StartSetting();  // does the sim's sweep or rack, then shows the machine doing it
+		float SettingLength() const;
+		bool  SettingPinPose(int a_pin, bowl::Vec3& a_base, double a_rot[3][3]) const;  // false: out of sight
+		void  DrawMachine();
 		void Banner(const std::string& a_title, const std::string& a_sub, float a_seconds);
 		void Say(const std::string& a_message);
 
 		// ------------------------------------------------ the world (Game.cpp)
 		RE::ObjectRefHandle Spawn(RE::TESBoundObject* a_form, const RE::NiPoint3& a_pos) const;
 		void                Prepare(RE::TESObjectREFR* a_ref, bool& a_done);
-		static void         PlaceNode(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_pos, const RE::NiMatrix3& a_rot, bool a_hidden);
+		static void         PlaceNode(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_pos, const RE::NiMatrix3& a_rot, bool a_hidden, float a_scale = 1.0f);
 		void                HideVanilla(const lanes::Lane& a_lane);
 		void                RestoreVanilla();
 		void                DrawPins();
@@ -169,6 +188,12 @@ namespace fb
 		bowl::AiThrow                            _aiPlan;
 		std::array<RE::ObjectRefHandle, 10>      _pins{};
 		std::array<bool, 10>                     _pinPrepared{};
+		RE::ObjectRefHandle                      _deck;
+		RE::ObjectRefHandle                      _sweep;
+		bool                                     _deckPrepared{ false };
+		bool                                     _sweepPrepared{ false };
+		bool                                     _setFresh{ false };
+		std::array<SetPin, 10>                   _setPins{};
 		std::array<BallSlot, 2>                  _balls{};
 		int                                      _active{ 0 };     // the ball in play
 		std::vector<RE::ObjectRefHandle>         _hiddenVanilla;   // pins and balls we disabled

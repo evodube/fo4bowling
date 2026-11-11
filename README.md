@@ -21,6 +21,12 @@ wants to start out wide and come back into the pocket (the 1-3 for a right-hande
 two balls are quite the same: every throw strays a little from what you set up (more when you throw it hard), the
 lane drifts each ball a touch left or right, and the pinsetter never spots the pins exactly.
 
+Between balls a pinsetter does its job: the sweep bar drops in front of the pins, the deck comes down and lifts
+any pins still standing, the sweep clears the fallen ones back into the pit, and the deck sets the pins (or a fresh
+rack) down again. The lane's own machine is part of the cell's precombined scenery and can't move, so the sweep
+and deck are our own, built from the game's machine-kit pieces (`[Pinsetter]` in the INI turns it off or moves
+where they wait).
+
 The pins are real rigid bodies: they fly, tumble, roll on their sides, wobble on their bases, bounce off the
 kickbacks and drop into the gutters and the pit. Ten frames with strikes, spares and the tenth frame's extra balls,
 scored on the HUD's sheet under everyone's names.

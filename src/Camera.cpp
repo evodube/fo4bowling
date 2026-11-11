@@ -158,6 +158,7 @@ namespace fb
 		switch (_phase) {
 		case Phase::kRolling:
 		case Phase::kResult:
+		case Phase::kSetting:
 		case Phase::kOver:
 			{
 				const auto&  b = _sim->GetBall();

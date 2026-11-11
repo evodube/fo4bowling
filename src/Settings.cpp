@@ -107,6 +107,10 @@ namespace fb
 		soundFullDistance = std::max(10.0f, ReadFloat(L"Sound", L"fFullDistance", soundFullDistance));
 		soundMaxDistance = std::max(soundFullDistance + 10.0f, ReadFloat(L"Sound", L"fMaxDistance", soundMaxDistance));
 
+		pinsetter = ReadBool(L"Pinsetter", L"bEnabled", pinsetter);
+		deckHeight = std::clamp(ReadFloat(L"Pinsetter", L"fDeckHeight", deckHeight), 45.0f, 400.0f);
+		sweepHeight = std::clamp(ReadFloat(L"Pinsetter", L"fSweepHeight", sweepHeight), 45.0f, 400.0f);
+
 		hudScale = std::clamp(ReadFloat(L"HUD", L"fScale", hudScale), 0.3f, 3.0f);
 		notifications = ReadBool(L"HUD", L"bNotifications", notifications);
 

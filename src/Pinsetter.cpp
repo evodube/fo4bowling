@@ -31,10 +31,11 @@ namespace fb
 		constexpr float         kSweepScale = 1.84f;      // -> 217: just inside the side walls
 		constexpr double        kSweepBottom = 4.0 * kSweepScale;
 		constexpr double        kSweepHalfDepth = 5.0 * kSweepScale;
-		constexpr RE::TESFormID kTableBase = 0x000F2C32;  // GreenHsCenterRoofTopBeam01: 256 long, 14 deep, z -4..8
-		constexpr float         kTableScale = 0.85f;      // -> 218 across the lane, inside the side walls
-		constexpr double        kTableBottom = 4.0 * kTableScale;
-		constexpr double        kTableHeight = 12.0 * kTableScale;  // (the blade's height: the machine sits on top of it)
+		// the plate that holds the pins: the first pinsetter's deck (the yellow-lit steel panel), under the machine
+		constexpr RE::TESFormID kTableBase = 0x00135F6C;  // MacBasePanelBMed01: 98 x 84 x 9, its foot at z 0
+		constexpr float         kTableScale = 1.15f;      // -> 113 across the lane, 97 deep: over the whole rack
+		constexpr double        kTableBottom = 0.0;
+		constexpr double        kTableHeight = 9.0 * kTableScale;  // (the machine sits on top of it)
 		constexpr double        kGrab = 0.8;              // the deck's underside this far above a standing pin's head
 
 		using Keys = std::vector<std::array<double, 2>>;  // (time, value), eased between
@@ -120,7 +121,7 @@ namespace fb
 			return util::NodeRotation(m);
 		}
 
-		// the blade over the pins lies across the lane: its long x along the world's y
+		// the plate under the machine lies across the lane: its long x along the world's y
 		RE::NiMatrix3 AcrossTheLane()
 		{
 			const double m[3][3]{ { 0.0, -1.0, 0.0 }, { 1.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 } };
@@ -319,7 +320,7 @@ namespace fb
 			sweepX = At(plan.sweepX, _phaseTime);
 		}
 
-		// the deck's middle over the middle of the rack. Its underside is the yellow blade: what holds the pins as the
+		// the deck's middle over the middle of the rack. Its underside is the steel plate: what holds the pins as the
 		// deck brings them down (they hang just under it), with the machine on top
 		const double rackMiddle = spec.headPin + spec.pinSpacing * 3.0 * 0.866 * 0.5;
 		double       machineZ = deckZ;

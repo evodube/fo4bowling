@@ -23,8 +23,7 @@ are a pin knock layered with a pin-on-pin clack or two.
   pin_*
       "bowling pins mono" by Bruce Burbank
       https://freesound.org/people/Bruce%20Burbank/sounds/151203/
-  sweep_*   "Metal Slide 2" by LordForklift, with "Mechanical1" by BMacZero
-      https://freesound.org/people/LordForklift/sounds/448418/
+  sweep_*   "Mechanical1" by BMacZero, with the rolling ball (driftworks, slowed) and the pin knocks
       https://freesound.org/people/BMacZero/sounds/94120/
   set_*     "LightClunk1" and "LightClunk2" by BMacZero, with the pin knocks above
       https://freesound.org/people/BMacZero/sounds/94129/

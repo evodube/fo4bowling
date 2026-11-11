@@ -118,12 +118,13 @@ namespace fb::Hud
 		};
 		Face& FaceFor(float a_px)
 		{
-			static Face small{ &Glyphs::kSmall, &g_small };
-			static Face large{ &Glyphs::kLarge, &g_large };
+			// (not "small": a Windows macro)
+			static Face faceSmall{ &Glyphs::kSmall, &g_small };
+			static Face faceLarge{ &Glyphs::kLarge, &g_large };
 			static bool built = false;
 			if (!built) {
 				built = true;
-				for (Face* f : { &small, &large }) {
+				for (Face* f : { &faceSmall, &faceLarge }) {
 					for (int i = 0; i < f->atlas->count; ++i) {
 						const auto& g = f->atlas->glyphs[i];
 						if (g.code < 256) {
@@ -132,7 +133,7 @@ namespace fb::Hud
 					}
 				}
 			}
-			return a_px <= 34.0f ? small : large;
+			return a_px <= 34.0f ? faceSmall : faceLarge;
 		}
 
 		// the characters of a UTF-8 string, as codes (only what the HUD uses: ASCII and the middle dot)

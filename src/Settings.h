@@ -65,6 +65,7 @@ namespace fb
 		float returnZ{ 53.6f };
 		float returnHood{ 110.0f };   // where a returning ball comes out, inside the hood
 		float returnSpeed{ 70.0f };   // how fast it rolls down the return
+		bool  gutterReturn{ true };   // a thrown ball rolls back up the gutter to the return (off: it waits in the pit for the sweep)
 
 		// [Sound] real alley recordings, positioned where they happen
 		bool  sound{ true };

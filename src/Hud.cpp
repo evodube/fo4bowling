@@ -988,6 +988,7 @@ namespace fb::Hud
 			Text("Lane");
 			Separator();
 			save(Checkbox("Pinsetter (from the next game)", &s.pinsetter));
+			save(Checkbox("Ball rolls back up the gutter to the return", &s.gutterReturn));
 			save(Checkbox("Lights over the pins (from the next game)", &s.pinLights));
 			slider("Light brightness", s.pinLightBrightness, 0.1f, 1.5f, "%.2f");
 		}

@@ -513,7 +513,7 @@ namespace fb
 		}
 		{
 			auto spec = s.spec;
-			spec.returnSide = ReturnSide(a_lane);  // (off the back wall, the ball heads for the return's side)
+			spec.returnSide = s.gutterReturn ? ReturnSide(a_lane) : 0.0;  // (off the back wall, the ball heads for the return's side)
 			_sim = std::make_unique<bowl::Sim>(spec);
 		}
 		_sim->Rack(s.pinJitter, _rng());
@@ -740,7 +740,7 @@ namespace fb
 		// stays where it is until the sweep takes it
 		auto&       ball = _balls[static_cast<std::size_t>(_active)];
 		const auto& sb = _sim->GetBall();
-		if (sb.pos.x > _sim->GetSpec().deckEnd - 2.0 * _sim->GetSpec().ballRadius) {
+		if (Settings::Get().gutterReturn && sb.pos.x > _sim->GetSpec().deckEnd - 2.0 * _sim->GetSpec().ballRadius) {
 			ball.at = BallAt::kGutter;
 			ball.runX = sb.pos.x;
 			ball.runY = sb.pos.y;

@@ -76,6 +76,7 @@ namespace fb
 		::WritePrivateProfileStringW(L"Pinsetter", L"bLights", pinLights ? L"1" : L"0", kIniPath);
 		::WritePrivateProfileStringW(L"Pinsetter", L"fLightBrightness", std::format(L"{:.2f}", pinLightBrightness).c_str(), kIniPath);
 		::WritePrivateProfileStringW(L"Guide", L"bEnabled", guide ? L"1" : L"0", kIniPath);
+		::WritePrivateProfileStringW(L"Return", L"bGutterReturn", gutterReturn ? L"1" : L"0", kIniPath);
 	}
 
 	void Settings::Load()
@@ -117,6 +118,7 @@ namespace fb
 		returnSpot1 = ReadFloat(L"Return", L"fSpot1", returnSpot1);
 		returnSpot2 = ReadFloat(L"Return", L"fSpot2", returnSpot2);
 		returnZ = ReadFloat(L"Return", L"fZ", returnZ);
+		gutterReturn = ReadBool(L"Return", L"bGutterReturn", gutterReturn);
 		returnHood = ReadFloat(L"Return", L"fHood", returnHood);
 		returnSpeed = std::clamp(ReadFloat(L"Return", L"fSpeed", returnSpeed), 5.0f, 1000.0f);
 

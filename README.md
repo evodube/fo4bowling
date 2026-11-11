@@ -38,8 +38,10 @@ happens.
 Your opponents bowl with their own skill and hand (the same every game): each picks the ball up in the middle, walks
 over to their spot, lines up the pocket for a strike or the key pin for a spare, and misses the way people do.
 
-You need [F4SE](https://f4se.silverlock.org/) and the Address Library. The HUD (score sheet, meters, calls) needs
-F4SE Menu Framework; without it the game still plays and the calls come up as the game's own notifications.
+You need [F4SE](https://f4se.silverlock.org/) and the Address Library. The HUD (score sheet, meters, controls, the
+strike X) needs F4SE Menu Framework; without it the game still plays and the calls come up as the game's own
+notifications. The HUD is set in Oswald, and the strike X is Monoton's neon X (both SIL Open Font License, see
+`Data\F4SE\Plugins\fo4bowling\OFL-*.txt`), drawn from textures in that folder.
 
 Settings are in `Data\F4SE\Plugins\fo4bowling.ini`, re-read at the start of every game.
 

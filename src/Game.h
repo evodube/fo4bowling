@@ -39,6 +39,7 @@ namespace fb
 			std::string              banner;        // "STRIKE!"
 			std::string              bannerSub;
 			float                    bannerAlpha{ 0.0f };
+			float                    bannerAge{ 0.0f };  // seconds since it went up (for its entrance)
 			bool                     over{ false };
 			std::string              keys;          // the controls, along the bottom
 			std::vector<std::array<float, 2>> guide;  // the aim line, screen points 0..1 from the ball outwards

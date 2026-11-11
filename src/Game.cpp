@@ -218,6 +218,7 @@ namespace fb
 			h.banner = _bannerTime > 0.0f ? _banner : std::string();
 			h.bannerSub = _bannerSub;
 			h.bannerAlpha = _bannerLength > 0.0f ? std::clamp(std::min(_bannerTime, _bannerLength - _bannerTime) * 4.0f, 0.0f, 1.0f) : 0.0f;
+			h.bannerAge = std::max(0.0f, _bannerLength - _bannerTime);
 			h.over = _phase == Phase::kOver;
 			h.guide = _guide;
 			if (AiTurn()) {

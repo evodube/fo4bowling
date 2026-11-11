@@ -32,7 +32,7 @@ namespace fb
 		constexpr RE::TESFormID kTableBase = 0x000F2C32;  // GreenHsCenterRoofTopBeam01: 256 long, 14 deep, z -4..8
 		constexpr float         kTableScale = 0.85f;      // -> 218 across the lane, inside the side walls
 		constexpr double        kTableBottom = 4.0 * kTableScale;
-		constexpr double        kTableGap = 10.0;         // the machine sits this far above the table under it
+		constexpr double        kBladeGap = 1.0;          // (it rides on top of the sweep bar, this far above it)
 		constexpr double        kGrab = 0.8;              // the deck's underside this far above a standing pin's head
 
 		using Keys = std::vector<std::array<double, 2>>;  // (time, value), eased between
@@ -118,7 +118,7 @@ namespace fb
 			return util::NodeRotation(m);
 		}
 
-		// the table under the machine lies across the lane: its long x along the world's y
+		// the blade on the sweep lies across the lane: its long x along the world's y
 		RE::NiMatrix3 AcrossTheLane()
 		{
 			const double m[3][3]{ { 0.0, -1.0, 0.0 }, { 1.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 } };
@@ -162,7 +162,7 @@ namespace fb
 		_deck = Spawn(deck, lanes::ToWorld(a_lane, s.spec.headPin + 36.0, 0.0, s.deckHeight));
 		_sweep = Spawn(sweep, lanes::ToWorld(a_lane, s.spec.kickbackStart + 20.0, 0.0, s.sweepHeight));
 		if (auto* table = Piece(kTableBase)) {
-			_table = Spawn(table, lanes::ToWorld(a_lane, s.spec.headPin + 36.0, 0.0, s.deckHeight));
+			_table = Spawn(table, lanes::ToWorld(a_lane, s.spec.kickbackStart + 20.0, 0.0, s.sweepHeight));
 		}
 		_deckPrepared = _sweepPrepared = _tablePrepared = false;
 	}
@@ -299,13 +299,13 @@ namespace fb
 
 		// the deck's middle over the middle of the rack
 		const double rackMiddle = spec.headPin + spec.pinSpacing * 3.0 * 0.866 * 0.5;
-		// the table is the deck's underside (what meets the pins); the machine rides on top of it
-		if (auto table = _table.get()) {
-			Prepare(table.get(), _tablePrepared);
-			PlaceNode(table.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, deckZ + kTableBottom), AcrossTheLane(), false, kTableScale);
-			deckZ += kTableGap;
-		}
 		PlaceNode(deck.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, deckZ + kDeckBottom), MachineFacing(), false, kDeckScale);
 		PlaceNode(sweep.get(), lanes::ToWorld(*_lane, sweepX, 0.0, sweepZ + kSweepBottom), Straight(), false, kSweepScale);
+		// the first pinsetter's flat blade, in front of the pins as it was: on top of the sweep bar, moving with it
+		if (auto table = _table.get()) {
+			Prepare(table.get(), _tablePrepared);
+			const double top = sweepZ + 2.0 * kSweepBottom + kBladeGap;
+			PlaceNode(table.get(), lanes::ToWorld(*_lane, sweepX, 0.0, top + kTableBottom), AcrossTheLane(), false, kTableScale);
+		}
 	}
 }

@@ -15,6 +15,7 @@ namespace fb
 		}
 
 		void Load();
+		void SaveMenu() const;  // (what the settings page changes, back to the INI)
 
 		// a key's name for prompts ("F", "Numpad 7")
 		static std::string Key(int a_vk);
@@ -34,8 +35,8 @@ namespace fb
 		bool  invertPull{ false };     // pushing forward gives power instead
 		float aimPerCount{ 0.012f };   // degrees of aim per count of sideways mouse movement
 		float maxAim{ 6.0f };          // the most the throw can angle off straight, degrees
-		float revs{ 65.0f };           // spin, radians per second (about 620 rpm): the more, the more it can hook
-		float maxHook{ 50.0f };        // how far full hook turns the spin axis sideways, degrees
+		float revs{ 50.0f };           // spin, radians per second (about 480 rpm): the more, the more it can hook
+		float maxHook{ 35.0f };        // how far full hook turns the spin axis sideways, degrees
 		float spinPerCount{ 0.25f };   // percent of full hook per count of sideways mouse movement during the swing (0 = off)
 		float moveSpeed{ 60.0f };      // how fast you move along the foul line, units per second
 		float inaccuracy{ 1.0f };      // how much each throw strays from what you set up (0 = never; harder throws stray more)
@@ -81,6 +82,8 @@ namespace fb
 		float         pinLightBrightness{ 0.70f };     // their strength, as a share of the light's own
 
 		// [HUD]
+		static constexpr std::array<const char*, 4> kHudStyles{ "Modern", "Pip-Boy", "Vault-Tec", "RobCo" };
+		int   hudStyle{ 1 };  // which of kHudStyles
 		float hudScale{ 1.0f };
 		bool  notifications{ false };  // calls ("Strike!") as the game's own corner notifications too
 

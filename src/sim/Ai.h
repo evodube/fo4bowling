@@ -16,8 +16,8 @@ namespace bowl
 	{
 		double minSpeed{ 300.0 };
 		double maxSpeed{ 820.0 };
-		double revs{ 65.0 };
-		double maxAxis{ 0.87 };   // radians: full hook
+		double revs{ 50.0 };
+		double maxAxis{ 0.61 };   // radians: full hook (35 degrees)
 		double maxAngle{ 0.105 }; // radians either side of straight
 	};
 

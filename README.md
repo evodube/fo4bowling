@@ -40,8 +40,11 @@ over to their spot, lines up the pocket for a strike or the key pin for a spare,
 
 You need [F4SE](https://f4se.silverlock.org/) and the Address Library. The HUD (score sheet, meters, controls, the
 strike X) needs F4SE Menu Framework; without it the game still plays and the calls come up as the game's own
-notifications. The HUD is set in Oswald, and the strike X is Monoton's neon X (both SIL Open Font License, see
-`Data\F4SE\Plugins\fo4bowling\OFL-*.txt`), drawn from textures in that folder.
+notifications. It comes in four looks: Pip-Boy (Fallout 4's own green HUD, the default), Vault-Tec (1950s blue
+and yellow), RobCo (a green-phosphor terminal) and Modern (smoked glass and amber). Pick one with `[HUD] sStyle`, or
+in F4SE Menu Framework's menu under **Playable Bowling**, which also has the HUD size, the aim line, sound, the
+pinsetter and its lights, and saves to the INI. The type is Roboto Condensed, VT323, Oswald and Monoton (all SIL
+Open Font License, see `Data\F4SE\Plugins\fo4bowling\OFL-*.txt`), drawn from textures in that folder.
 
 Settings are in `Data\F4SE\Plugins\fo4bowling.ini`, re-read at the start of every game.
 

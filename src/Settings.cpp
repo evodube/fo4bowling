@@ -1,5 +1,7 @@
 #include "Settings.h"
 
+#include <cwctype>
+
 namespace fb
 {
 	namespace
@@ -60,6 +62,21 @@ namespace fb
 		}
 	}
 
+	void Settings::SaveMenu() const
+	{
+		const std::string  style = kHudStyles[static_cast<std::size_t>(std::clamp(hudStyle, 0, static_cast<int>(kHudStyles.size()) - 1))];
+		const std::wstring wstyle(style.begin(), style.end());
+		::WritePrivateProfileStringW(L"HUD", L"sStyle", wstyle.c_str(), kIniPath);
+		::WritePrivateProfileStringW(L"HUD", L"fScale", std::format(L"{:.2f}", hudScale).c_str(), kIniPath);
+		::WritePrivateProfileStringW(L"HUD", L"bNotifications", notifications ? L"1" : L"0", kIniPath);
+		::WritePrivateProfileStringW(L"Sound", L"bEnabled", sound ? L"1" : L"0", kIniPath);
+		::WritePrivateProfileStringW(L"Sound", L"fVolume", std::format(L"{:.2f}", soundVolume).c_str(), kIniPath);
+		::WritePrivateProfileStringW(L"Pinsetter", L"bEnabled", pinsetter ? L"1" : L"0", kIniPath);
+		::WritePrivateProfileStringW(L"Pinsetter", L"bLights", pinLights ? L"1" : L"0", kIniPath);
+		::WritePrivateProfileStringW(L"Pinsetter", L"fLightBrightness", std::format(L"{:.2f}", pinLightBrightness).c_str(), kIniPath);
+		::WritePrivateProfileStringW(L"Guide", L"bEnabled", guide ? L"1" : L"0", kIniPath);
+	}
+
 	void Settings::Load()
 	{
 		keyLeft = ReadKey(L"iLeft", keyLeft);
@@ -115,6 +132,27 @@ namespace fb
 		pinLightHeight = std::clamp(ReadFloat(L"Pinsetter", L"fLightHeight", pinLightHeight), 10.0f, 400.0f);
 		pinLightBrightness = std::clamp(ReadFloat(L"Pinsetter", L"fLightBrightness", pinLightBrightness), 0.0f, 4.0f);
 
+		{
+			// the style by name (any case, with or without the dash), or its number
+			auto name = ReadString(L"HUD", L"sStyle", L"Pip-Boy");
+			std::wstring key;
+			for (auto c : name) {
+				if (std::iswalnum(c)) {
+					key += static_cast<wchar_t>(std::towlower(c));
+				}
+			}
+			for (int i = 0; i < static_cast<int>(kHudStyles.size()); ++i) {
+				std::wstring want;
+				for (const char* c = kHudStyles[static_cast<std::size_t>(i)]; *c; ++c) {
+					if (std::isalnum(static_cast<unsigned char>(*c))) {
+						want += static_cast<wchar_t>(std::tolower(static_cast<unsigned char>(*c)));
+					}
+				}
+				if (key == want || key == std::to_wstring(i)) {
+					hudStyle = i;
+				}
+			}
+		}
 		hudScale = std::clamp(ReadFloat(L"HUD", L"fScale", hudScale), 0.3f, 3.0f);
 		notifications = ReadBool(L"HUD", L"bNotifications", notifications);
 

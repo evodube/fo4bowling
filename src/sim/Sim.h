@@ -83,6 +83,7 @@ namespace bowl
 		double pitDepth{ 0.0 };         // (the alley's floor runs on to the wall: the slot's floor is level with the deck)
 		double pitBack{ 27.0 };         // the back wall, this far past the deck's end (1232: the cell's own wall)
 		double pitBackRestitution{ 0.45 };  // pins and the ball bounce off it
+		double returnSide{ 0.0 };       // off the back wall the ball heads this way (+1 left, -1 right: the ball return's side; 0: either)
 		double oilLength{ 400.0 };      // the oiled front of the lane; dry from here on
 		double oilFriction{ 0.04 };     // ball-lane sliding friction on oil
 		double dryFriction{ 0.20 };     // ...and on the dry back end

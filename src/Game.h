@@ -78,6 +78,7 @@ namespace fb
 			kHand,       // being picked up, then held at the foul line
 			kLane,       // thrown
 			kGone,       // in the pit, on its way back
+			kGutter,     // rolling back up the gutter on the return's side, to the return
 		};
 
 		struct BallSlot
@@ -90,7 +91,19 @@ namespace fb
 			RE::NiPoint3        pos;                // where it was last drawn
 			double              orient[3][3]{ { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };  // world = orient * the ball's own
 			bool                prepared{ false };  // its collision's off
+			double              runX{ 0.0 }, runY{ 0.0 }, runZ{ 0.0 };  // (rolling back: where it is, lane frame)
 		};
+
+		// two balls resting on each lane's return while no game's on there, for the look of the place
+		struct Display
+		{
+			std::array<RE::ObjectRefHandle, 2> balls;
+			std::array<bool, 2>                prepared{};
+			std::vector<RE::ObjectRefHandle>   hidden;  // (the lane's own balls on its return, out of the way meanwhile)
+		};
+		void UpdateDisplay();
+		void RemoveDisplay(int a_lane);  // (-1: both)
+		std::array<Display, 2> _display;
 
 		// ------------------------------------------------ main thread
 		void Tick();
@@ -162,6 +175,8 @@ namespace fb
 		void                DrawPins();
 		void                DrawBalls(float a_dt);
 		RE::NiPoint3        ReturnPoint(float a_along, float a_height) const;  // a point on the ball return, its frame
+		static RE::NiPoint3 ReturnPointOf(const lanes::Lane& a_lane, float a_along, float a_height);
+		static double       ReturnSide(const lanes::Lane& a_lane);  // +1 the return's left of the lane, -1 right
 		RE::NiPoint3        HeldPoint() const;                                  // the ball at the foul line
 		bool                StillHere() const;  // in the alley, alive, not in a fight
 		std::string         SplitName() const;  // "7-10 SPLIT" or empty

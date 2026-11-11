@@ -340,9 +340,11 @@ namespace bowl
 				b.vel.x = -0.25 * std::abs(into);
 				if (!b.hitBack) {
 					b.hitBack = true;
-					// which way it goes: the way it was already heading across, or (head on) towards the nearer side
-					const double side = std::abs(b.vel.y) > 5.0 ? (b.vel.y > 0.0 ? 1.0 : -1.0) : (b.pos.y >= 0.0 ? 1.0 : -1.0);
-					b.vel.y = side * std::max(std::abs(b.vel.y), 0.45 * std::abs(into));
+					// which way it goes: towards the ball return's side; or (no side set) the way it was already heading
+					// across, or (head on) towards the nearer side
+					const double side = _spec.returnSide != 0.0 ? (_spec.returnSide > 0.0 ? 1.0 : -1.0) :
+					                    std::abs(b.vel.y) > 5.0 ? (b.vel.y > 0.0 ? 1.0 : -1.0) : (b.pos.y >= 0.0 ? 1.0 : -1.0);
+					b.vel.y = side * std::max(b.vel.y * side, 0.45 * std::abs(into));
 					AddEvent(Event::Kind::kBallPit, b.pos, std::abs(into));
 				}
 			}

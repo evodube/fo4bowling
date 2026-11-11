@@ -176,6 +176,25 @@ int main()
 		Check(s.StandingMask() == called, "and the sweep keeps exactly the pins called standing");
 	}
 
+	for (const double side : { 1.0, -1.0 }) {
+		// with the ball return's side set, the ball always comes off the back wall that way
+		Spec spec;
+		spec.returnSide = side;
+		Sim     s(spec);
+		Release r;
+		r.y = -side * 30.0;  // (starting on the other side, heading straight)
+		r.speed = 650.0;
+		s.Throw(r);
+		double across = 0.0;
+		while (s.GetBall().state != BallState::kTaken && s.TimeSinceThrow() < 15.0) {
+			s.Step();
+			if (s.GetBall().state == BallState::kPit && s.GetBall().hitBack) {
+				across = across == 0.0 ? s.GetBall().vel.y : across;
+			}
+		}
+		Check(across * side > 0.0, std::string("off the back wall it heads for the return on the ") + (side > 0.0 ? "left" : "right"));
+	}
+
 	std::printf("pins\n");
 	{
 		Sim     s;

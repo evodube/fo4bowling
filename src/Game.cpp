@@ -91,6 +91,7 @@ namespace fb
 		_haveLastTick = true;
 
 		const bool paused = util::GamePaused();
+		UpdateDisplay();
 		if (_phase == Phase::kNone) {
 			UpdateLook();
 			if (!paused) {
@@ -509,12 +510,21 @@ namespace fb
 		for (const auto& b : _bowlers) {
 			_names.push_back(b.name);
 		}
-		_sim = std::make_unique<bowl::Sim>(s.spec);
+		{
+			auto spec = s.spec;
+			spec.returnSide = ReturnSide(a_lane);  // (off the back wall, the ball heads for the return's side)
+			_sim = std::make_unique<bowl::Sim>(spec);
+		}
 		_sim->Rack(s.pinJitter, _rng());
 		_match = bowl::Match(players);
 		_aiPlanned = false;
 
 		// the lane's own pins (and any balls on its return) out of the way; ours in their place
+		for (int l = 0; l < static_cast<int>(lanes::kLanes.size()); ++l) {
+			if (&lanes::kLanes[static_cast<std::size_t>(l)] == &a_lane) {
+				RemoveDisplay(l);  // (the game's own two balls take their place)
+			}
+		}
 		HideVanilla(a_lane);
 		SpawnMachine(a_lane);
 		for (int i = 0; i < bowl::Sim::kPins; ++i) {
@@ -725,11 +735,21 @@ namespace fb
 		log::info("ball: {} down ({} standing: {}){}", down, standing, PinList(_sim->StandingMask()), split.empty() ? "" : " " + split);
 
 		// the ball goes round the machine and comes back up the return
-		// (it stays where it is, in the pit or wherever it stopped, until the sweep takes it)
-		auto& ball = _balls[static_cast<std::size_t>(_active)];
-		ball.at = BallAt::kGone;
-		ball.hidden = kReturnDelay;
-		_ballLingers = true;
+		// a ball in the pit goes back up the gutter on the return's side and into the return; one that stopped short
+		// stays where it is until the sweep takes it
+		auto&       ball = _balls[static_cast<std::size_t>(_active)];
+		const auto& sb = _sim->GetBall();
+		if (sb.pos.x > _sim->GetSpec().deckEnd - 2.0 * _sim->GetSpec().ballRadius) {
+			ball.at = BallAt::kGutter;
+			ball.runX = sb.pos.x;
+			ball.runY = sb.pos.y;
+			ball.runZ = sb.z;
+			_ballLingers = false;
+		} else {
+			ball.at = BallAt::kGone;
+			ball.hidden = kReturnDelay;
+			_ballLingers = true;
+		}
 		_phase = Phase::kResult;
 		_phaseTime = 0.0f;
 	}
@@ -1168,13 +1188,105 @@ namespace fb
 
 	RE::NiPoint3 Game::ReturnPoint(float a_along, float a_height) const
 	{
+		return _lane ? ReturnPointOf(*_lane, a_along, a_height) : RE::NiPoint3{};
+	}
+
+	RE::NiPoint3 Game::ReturnPointOf(const lanes::Lane& a_lane, float a_along, float a_height)
+	{
 		// the return's own frame: y runs along it (towards the hood, by the lane), z up from its foot
-		auto* ret = _lane ? Ref(_lane->ballReturn) : nullptr;
+		auto* ret = Ref(a_lane.ballReturn);
 		if (!ret) {
 			return {};
 		}
 		const float a = ret->data.angle.z;
 		return ret->data.location + RE::NiPoint3{ std::sin(a), std::cos(a), 0.0f } * a_along + RE::NiPoint3{ 0.0f, 0.0f, a_height };
+	}
+
+	double Game::ReturnSide(const lanes::Lane& a_lane)
+	{
+		// (lane 3's return is on its right, lane 6's on its left: worked out from where they stand)
+		auto* ret = Ref(a_lane.ballReturn);
+		if (!ret) {
+			return 0.0;
+		}
+		double x = 0.0, y = 0.0, z = 0.0;
+		lanes::ToLane(a_lane, ret->data.location, x, y, z);
+		return y >= 0.0 ? 1.0 : -1.0;
+	}
+
+	void Game::UpdateDisplay()
+	{
+		// two balls on each lane's return while you're in the alley and no game's on that lane
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		auto* cell = player ? player->GetParentCell() : nullptr;
+		if (!cell || cell->GetFormID() != lanes::kCell) {
+			RemoveDisplay(-1);
+			return;
+		}
+		auto* ballBase = Base(lanes::kBallBase);
+		const auto& s = Settings::Get();
+		for (int l = 0; l < static_cast<int>(lanes::kLanes.size()); ++l) {
+			const auto& lane = lanes::kLanes[static_cast<std::size_t>(l)];
+			auto&       d = _display[static_cast<std::size_t>(l)];
+			if (_phase != Phase::kNone && _lane == &lane) {
+				RemoveDisplay(l);  // (the game's own two are there)
+				continue;
+			}
+			if (!ballBase || !Ref(lane.ballReturn)) {
+				continue;
+			}
+			if (!d.balls[0].get()) {
+				// the lane's own balls on the return, if it has any, out of the way first
+				const auto ret = ReturnPointOf(lane, 10.0f, s.returnZ);
+				cell->ForEachReferenceInRange(ret, 170.0f, [&](RE::TESObjectREFR* a_ref) {
+					auto* base = a_ref ? a_ref->GetObjectReference() : nullptr;
+					if (base && base->GetFormID() == lanes::kBallBase && !a_ref->IsDisabled() && std::abs(a_ref->data.location.z - ret.z) < 25.0f &&
+						a_ref->GetFormID() < 0xFF000000) {
+						a_ref->Disable();
+						d.hidden.push_back(a_ref->GetHandle());
+					}
+					return RE::BSContainer::ForEachResult::kContinue;
+				});
+				for (int b = 0; b < 2; ++b) {
+					d.balls[static_cast<std::size_t>(b)] = Spawn(ballBase, ReturnPointOf(lane, b == 0 ? s.returnSpot1 : s.returnSpot2, s.returnZ));
+					d.prepared[static_cast<std::size_t>(b)] = false;
+				}
+			}
+			for (int b = 0; b < 2; ++b) {
+				auto ref = d.balls[static_cast<std::size_t>(b)].get();
+				if (!ref) {
+					continue;
+				}
+				Prepare(ref.get(), d.prepared[static_cast<std::size_t>(b)]);
+				// (each turned its own way, so the two don't look stamped out)
+				const double turn = b == 0 ? 0.6 : 2.3;
+				const double m[3][3]{ { std::cos(turn), -std::sin(turn), 0.0 }, { std::sin(turn), std::cos(turn), 0.0 }, { 0.0, 0.0, 1.0 } };
+				PlaceNode(ref.get(), ReturnPointOf(lane, b == 0 ? s.returnSpot1 : s.returnSpot2, s.returnZ), util::NodeRotation(m), false);
+			}
+		}
+	}
+
+	void Game::RemoveDisplay(int a_lane)
+	{
+		for (int l = 0; l < static_cast<int>(_display.size()); ++l) {
+			if (a_lane >= 0 && l != a_lane) {
+				continue;
+			}
+			auto& d = _display[static_cast<std::size_t>(l)];
+			for (auto& h : d.balls) {
+				if (auto ref = h.get()) {
+					ref->Disable();
+					ref->SetWantsDelete(true);
+				}
+				h = {};
+			}
+			for (auto& h : d.hidden) {
+				if (auto ref = h.get(); ref && ref->IsDisabled()) {
+					ref->Enable(false);
+				}
+			}
+			d.hidden.clear();
+		}
 	}
 
 	RE::NiPoint3 Game::HeldPoint() const
@@ -1275,6 +1387,41 @@ namespace fb
 					bowl::RotateBy(ball.orient, { w.x, w.y, w.z }, a_dt);
 					break;
 				}
+			case BallAt::kGutter:
+				{
+					// along the slot to the gutter on the return's side, then back up it towards the foul line, where it
+					// drops out of sight into the return
+					const auto&  spec = s.spec;
+					const double side = _sim ? (_sim->GetSpec().returnSide >= 0.0 ? 1.0 : -1.0) : 1.0;
+					const double gy = side * (spec.laneHalfWidth + spec.gutterWidth * 0.5);
+					const double gz = R - spec.gutterDepth;
+					const double speed = 420.0;
+					double       step = speed * a_dt;
+					double       vx = 0.0, vy = 0.0;
+					// first across to the gutter's line (in the slot), then along it
+					if (std::abs(ball.runY - gy) > 0.5) {
+						const double d = std::min(step, std::abs(gy - ball.runY));
+						vy = gy > ball.runY ? 1.0 : -1.0;
+						ball.runY += vy * d;
+						ball.runX = std::min(ball.runX, spec.deckEnd + R);
+						step -= d;
+					}
+					if (step > 0.0) {
+						vx = -1.0;
+						ball.runX -= step;
+					}
+					ball.runZ += (gz - ball.runZ) * std::min(1.0, 6.0 * static_cast<double>(a_dt));
+					ball.pos = lanes::ToWorld(*_lane, ball.runX, ball.runY, ball.runZ);
+					// rolling: turning about the axis across its path
+					const auto spin = lanes::DirToWorld(-vy * speed / R, vx * speed / R, 0.0);
+					bowl::RotateBy(ball.orient, { spin.x, spin.y, spin.z }, a_dt);
+					if (ball.runX <= 0.0) {
+						ball.at = BallAt::kGone;  // (into the return: out of its hood in a moment)
+						ball.hidden = 0.5f;
+						hidden = true;
+					}
+					break;
+				}
 			case BallAt::kGone:
 				if (_ballLingers && b == _active) {
 					// still where it ended up (rolling about in the pit while the sim runs) until the sweep takes it
@@ -1325,6 +1472,9 @@ namespace fb
 		_hiddenVanilla.clear();
 		_deck = {};
 		_sweep = {};
+		for (auto& d : _display) {
+			d = {};  // (gone with the old game's references)
+		}
 		_table = {};
 		_lights = {};
 		_held.clear();  // (they were let go before any save, so the loaded game has them free)
@@ -1351,6 +1501,7 @@ namespace fb
 		if (_phase != Phase::kNone) {
 			EndGame("Bowling: game stopped for the save");
 		}
+		RemoveDisplay(-1);  // (back the next moment)
 		BlockActivate(false);
 	}
 }

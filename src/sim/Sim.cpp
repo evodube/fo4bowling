@@ -198,6 +198,27 @@ namespace bowl
 		_events.clear();
 	}
 
+	void Sim::ForceSettle()
+	{
+		for (auto& p : _pins) {
+			if (p.frozen || p.state == PinState::kSwept) {
+				continue;
+			}
+			if (p.state == PinState::kStanding && PinUpright(p)) {
+				const Vec3 fwd = p.rot.Rotate({ 1.0, 0.0, 0.0 });
+				StandPin(p, { p.com.x, p.com.y }, std::atan2(fwd.y, fwd.x));
+			} else {
+				if (p.state == PinState::kStanding) {
+					p.state = PinState::kDown;
+				}
+				p.vel = {};
+				p.angVel = {};
+				p.asleep = true;
+			}
+		}
+		_still = kSettleSeconds;
+	}
+
 	void Sim::KeepOnly(std::uint32_t a_mask)
 	{
 		for (int i = 0; i < kPins; ++i) {

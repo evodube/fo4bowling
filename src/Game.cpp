@@ -25,6 +25,7 @@ namespace fb
 		constexpr int    kCrashPins = 4;           // ...the crash when at least this many pins are going by then
 		constexpr float  kOverSeconds = 3.0f;      // the final scores, then the game packs itself away
 		constexpr float  kReturnDelay = 1.6f;      // a thrown ball spends this long in the machine before it comes back
+		constexpr double kCallAfter = 2.4;         // the ball's called this long after it reaches the pins, whatever's still moving
 		constexpr float  kQuitWindow = 3.0f;       // the quit key twice within this many seconds stops the game
 		constexpr float  kAiStandSeconds = 0.5f;   // an NPC stands in the middle with the ball this long, then walks to their spot
 		constexpr float  kAiSettleSeconds = 0.8f;  // ...and stands there this long before throwing
@@ -131,14 +132,32 @@ namespace fb
 					}
 					break;
 				case Phase::kRolling:
-					_sim->Advance(dt);
-					PlaySounds(_sim->TakeEvents());
-					if (_sim->Settled()) {
-						Audio::StopRoll();
-						BallSettled();
+					{
+						_sim->Advance(dt);
+						PlaySounds(_sim->TakeEvents());
+						// timed, like a real machine: a moment after the ball reaches the pins (or the pit) it's called
+						const auto& sb = _sim->GetBall();
+						if (_reachedAt < 0.0 && (sb.pos.x > _sim->GetSpec().kickbackStart || sb.state == bowl::BallState::kPit ||
+													sb.state == bowl::BallState::kTaken)) {
+							_reachedAt = _sim->TimeSinceThrow();
+						}
+						const bool due = _reachedAt >= 0.0 && _sim->TimeSinceThrow() - _reachedAt >= kCallAfter;
+						if (_sim->Settled() || due) {
+							if (!_sim->Settled()) {
+								_sim->ForceSettle();
+							}
+							Audio::StopRoll();
+							BallSettled();
+						}
 					}
 					break;
 				case Phase::kResult:
+					// (the ball's still rolling about in the pit meanwhile; the pins have stopped. Only in the pit, where it
+					// can't touch them: one still on the deck stays put)
+					if (_sim->GetBall().state == bowl::BallState::kPit) {
+						_sim->Advance(dt);
+						PlaySounds(_sim->TakeEvents());
+					}
 					if (!_match.Over() && MachineOn()) {
 						if (_phaseTime >= kMachineAfter) {
 							StartSetting();
@@ -650,6 +669,7 @@ namespace fb
 		_aiPlanned = false;
 		_rackFullAtThrow = _sim->StandingCount() >= 6;
 		_impactAt = -1.0;
+		_reachedAt = -1.0;
 		_impactDone = false;
 		_lastPinSound = -1.0;
 		_sim->Throw(r);
@@ -705,15 +725,18 @@ namespace fb
 		log::info("ball: {} down ({} standing: {}){}", down, standing, PinList(_sim->StandingMask()), split.empty() ? "" : " " + split);
 
 		// the ball goes round the machine and comes back up the return
+		// (it stays where it is, in the pit or wherever it stopped, until the sweep takes it)
 		auto& ball = _balls[static_cast<std::size_t>(_active)];
 		ball.at = BallAt::kGone;
 		ball.hidden = kReturnDelay;
+		_ballLingers = true;
 		_phase = Phase::kResult;
 		_phaseTime = 0.0f;
 	}
 
 	void Game::NextBall(bool a_racked)
 	{
+		_ballLingers = false;  // (the sweep has had the thrown ball by now)
 		const auto& s = Settings::Get();
 		if (_match.Over()) {
 			_phase = Phase::kOver;
@@ -1253,6 +1276,21 @@ namespace fb
 					break;
 				}
 			case BallAt::kGone:
+				if (_ballLingers && b == _active) {
+					// still where it ended up (rolling about in the pit while the sim runs) until the sweep takes it
+					const bool swept = _phase == Phase::kSetting ? _phaseTime >= SweepTakesBall() :
+					                   (_phase != Phase::kResult);
+					if (!swept && _sim) {
+						if (_phase == Phase::kResult) {
+							const auto& sb = _sim->GetBall();
+							ball.pos = lanes::ToWorld(*_lane, sb.pos.x, sb.pos.y, sb.z);
+							const auto w = lanes::DirToWorld(sb.spin.x, sb.spin.y, sb.spin.z);
+							bowl::RotateBy(ball.orient, { w.x, w.y, w.z }, a_dt);
+						}
+						break;
+					}
+					_ballLingers = false;
+				}
 				hidden = true;
 				ball.hidden -= a_dt;
 				if (ball.hidden <= 0.0f) {

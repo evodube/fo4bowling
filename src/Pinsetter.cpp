@@ -217,6 +217,12 @@ namespace fb
 		_phaseTime = 0.0f;
 	}
 
+	float Game::SweepTakesBall() const
+	{
+		const Plan plan = MakePlan(_setFresh, _sim->GetSpec(), Settings::Get());
+		return static_cast<float>(plan.pushFrom + 0.6 * (plan.pushTo - plan.pushFrom));
+	}
+
 	float Game::SettingLength() const
 	{
 		return static_cast<float>(MakePlan(_setFresh, _sim->GetSpec(), Settings::Get()).length);

@@ -154,6 +154,28 @@ int main()
 		Check(s.GetBall().state == BallState::kTaken, "and is taken into the machine");
 	}
 
+	{
+		// called early (pins still going): what's standing stands straight and still, the rest stays down, and the
+		// sweep keeps exactly what was called standing
+		Release r;
+		r.y = -6.0;
+		r.speed = 650.0;
+		Sim s;
+		s.Throw(r);
+		while (s.TimeSinceThrow() < 2.0) {
+			s.Step();
+		}
+		s.ForceSettle();
+		const auto called = s.StandingMask();
+		bool       still = true;
+		for (const auto& p : s.Pins()) {
+			still = still && (p.vel.Length() == 0.0 || p.frozen || p.state == PinState::kSwept);
+		}
+		Check(s.Settled() && still, "an early call stops every pin");
+		s.Sweep();
+		Check(s.StandingMask() == called, "and the sweep keeps exactly the pins called standing");
+	}
+
 	std::printf("pins\n");
 	{
 		Sim     s;

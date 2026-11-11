@@ -211,6 +211,9 @@ namespace bowl
 		void Sweep();
 		// no pins at all (for working out a ball's path on its own)
 		void ClearPins();
+		// call it now, moving or not: a pin still standing upright is stood straight where it is, anything else stays
+		// down where it lies, and everything stops (the ball carries on)
+		void ForceSettle();
 		// only the pins in a_mask left standing (bit n = pin n), the rest swept away
 		void KeepOnly(std::uint32_t a_mask);
 		// where pin n (0 = the head pin, 1..9 the 2- to 10-pin) stands in a full rack

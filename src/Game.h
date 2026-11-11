@@ -146,6 +146,7 @@ namespace fb
 		bool  MachineOn() const;
 		void  StartSetting();  // does the sim's sweep or rack, then shows the machine doing it
 		float SettingLength() const;
+		float SweepTakesBall() const;  // (when, in the machine's cycle, the sweep has the thrown ball)
 		bool  SettingPinPose(int a_pin, bowl::Vec3& a_base, double a_rot[3][3]) const;  // false: out of sight
 		void  DrawMachine();
 		void  DimLights();
@@ -214,6 +215,8 @@ namespace fb
 		bool                                     _lastBallGutter{ false };
 		bool                                     _rackFullAtThrow{ false };
 		double                                   _impactAt{ -1.0 };  // (when the ball met the pins this throw)
+		double                                   _reachedAt{ -1.0 }; // (when it reached the pins or the pit)
+		bool                                     _ballLingers{ false };  // (the thrown ball still shows where it stopped)
 		bool                                     _impactDone{ false };
 		RE::NiPoint3                             _impactPos{};
 		double                                   _lastPinSound{ -1.0 };

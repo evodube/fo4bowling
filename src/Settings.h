@@ -22,8 +22,6 @@ namespace fb
 		// [Keys] Windows virtual-key codes (0 = off). Starting a game is the game's own activate key, at a ball return.
 		int   keyLeft{ 'A' };         // move along the foul line to your left (held)
 		int   keyRight{ 'D' };        // ...to your right
-		int   keyHookLeft{ 'W' };     // more hook to the left (a right-hander's hook)
-		int   keyHookRight{ 'S' };    // more hook to the right
 		int   keyFewer{ VK_LEFT };    // at the ball return: fewer players
 		int   keyMore{ VK_RIGHT };    // ...more
 		int   keyQuit{ 0x58 };        // X, twice: stop the game
@@ -38,7 +36,6 @@ namespace fb
 		float maxAim{ 6.0f };          // the most the throw can angle off straight, degrees
 		float revs{ 65.0f };           // spin, radians per second (about 620 rpm): the more, the more it can hook
 		float maxHook{ 50.0f };        // how far full hook turns the spin axis sideways, degrees
-		float hookStep{ 10.0f };       // percent of full hook per press of the hook keys
 		float spinPerCount{ 0.25f };   // percent of full hook per count of sideways mouse movement during the swing (0 = off)
 		float moveSpeed{ 60.0f };      // how fast you move along the foul line, units per second
 		float inaccuracy{ 1.0f };      // how much each throw strays from what you set up (0 = never; harder throws stray more)

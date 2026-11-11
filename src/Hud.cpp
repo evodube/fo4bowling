@@ -109,6 +109,9 @@ namespace fb::Hud
 			const float y = a_v.h * 0.5f + 22.0f;
 			Print(a_v, a_st.prompt, x, y, 24.0f, kBright);
 			Print(a_v, a_st.promptSub, x + 2.0f, y + 30.0f, 15.0f, kDim);
+			if (!a_st.promptVs.empty()) {
+				Print(a_v, a_st.promptVs, x + 2.0f, y + 50.0f, 13.0f, kDim);
+			}
 		}
 
 		// the score sheet: a row per player, ten frames each
@@ -133,7 +136,7 @@ namespace fb::Hud
 				if (up) {
 					Box(a_v, x - 4.0f, y - 2.0f, kTotalW + 8.0f, kRow - 2.0f, kHotPanel, 0, 4.0f);
 				}
-				std::string name = p < static_cast<int>(a_st.names.size()) ? a_st.names[static_cast<std::size_t>(p)] : std::format("PLAYER {}", p + 1);
+				std::string name = p < static_cast<int>(a_st.names.size()) ? a_st.names[static_cast<std::size_t>(p)] : std::string("?");
 				if (name.size() > 12) {
 					name = name.substr(0, 11) + ".";
 				}

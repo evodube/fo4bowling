@@ -23,7 +23,8 @@ namespace fb
 		constexpr float  kOverSeconds = 3.0f;      // the final scores, then the game packs itself away
 		constexpr float  kReturnDelay = 1.6f;      // a thrown ball spends this long in the machine before it comes back
 		constexpr float  kQuitWindow = 3.0f;       // the quit key twice within this many seconds stops the game
-		constexpr float  kAiAimSeconds = 1.6f;     // a companion lines up their throw this long
+		constexpr float  kAiStandSeconds = 0.5f;   // an NPC stands in the middle with the ball this long, then walks to their spot
+		constexpr float  kAiSettleSeconds = 0.8f;  // ...and stands there this long before throwing
 		constexpr double kPi = 3.14159265358979323846;
 
 		RE::TESBoundObject* Base(RE::TESFormID a_id)
@@ -108,11 +109,21 @@ namespace fb
 					break;
 				case Phase::kAiming:
 					if (AiTurn()) {
-						// a companion's turn: they line it up (the guide shows it), take a moment, and throw
+						// an NPC's turn: they stand in the middle with the ball, step over to their spot (or stay), settle
+						// and throw
 						if (!_aiPlanned) {
 							PlanAiThrow();
-						} else if (_phaseTime >= kAiAimSeconds) {
-							Throw(static_cast<float>(_aiPlan.power), true);
+						} else if (_phaseTime >= kAiStandSeconds) {
+							const double to = _aiPlan.release.y;
+							const double step = Settings::Get().moveSpeed * dt;
+							const bool   there = std::abs(to - _releaseY) <= step;
+							_releaseY = there ? to : _releaseY + (to > _releaseY ? step : -step);
+							if (there && _aiThereAt < 0.0f) {
+								_aiThereAt = _phaseTime;
+							}
+							if (_aiThereAt >= 0.0f && _phaseTime - _aiThereAt >= kAiSettleSeconds) {
+								Throw(static_cast<float>(_aiPlan.power), true);
+							}
 						}
 					}
 					break;
@@ -198,9 +209,8 @@ namespace fb
 				h.keys = std::format("{} IS BOWLING   {} TWICE: QUIT", _names[static_cast<std::size_t>(_match.Bowler())], util::Upper(Settings::Key(s.keyQuit)));
 			} else
 			{
-				h.keys = std::format("MOUSE: AIM   {}/{}: MOVE   {}/{}: SPIN   HOLD LEFT MOUSE: PULL BACK FOR POWER, SIDEWAYS FOR SPIN   {} TWICE: QUIT",
-				util::Upper(Settings::Key(s.keyLeft)), util::Upper(Settings::Key(s.keyRight)), util::Upper(Settings::Key(s.keyHookLeft)),
-				util::Upper(Settings::Key(s.keyHookRight)), util::Upper(Settings::Key(s.keyQuit)));
+				h.keys = std::format("MOUSE: AIM   {}/{}: MOVE   HOLD LEFT MOUSE: PULL BACK FOR POWER, SIDEWAYS FOR SPIN   {} TWICE: QUIT",
+					util::Upper(Settings::Key(s.keyLeft)), util::Upper(Settings::Key(s.keyRight)), util::Upper(Settings::Key(s.keyQuit)));
 			}
 		}
 		std::scoped_lock lock(_hudMutex);
@@ -211,9 +221,9 @@ namespace fb
 	{
 		const auto& s = Settings::Get();
 		const bool  focus = util::GameHasFocus();
-		const std::array<int, 7> keys{ s.keyLeft, s.keyRight, s.keyHookLeft, s.keyHookRight, s.keyQuit, s.keyFewer, s.keyMore };
-		std::array<bool, 7>      down{};
-		std::array<bool, 7>      pressed{};
+		const std::array<int, 5> keys{ s.keyLeft, s.keyRight, s.keyQuit, s.keyFewer, s.keyMore };
+		std::array<bool, 5>      down{};
+		std::array<bool, 5>      pressed{};
 		for (std::size_t i = 0; i < keys.size(); ++i) {
 			down[i] = focus && util::KeyDown(keys[i]);
 			pressed[i] = down[i] && !_keyWasDown[i];
@@ -228,12 +238,11 @@ namespace fb
 		_lmbWasDown = lmb;
 
 		if (_phase == Phase::kNone) {
-			// at a ball return: the arrows pick who plays (more players, or your companions), F starts
+			// at a ball return: the arrows pick how many play (you against the people nearby), F starts
 			if (_lookLane && !_modes.empty()) {
-				if (pressed[5] || pressed[6]) {
+				if (pressed[3] || pressed[4]) {
 					const int n = static_cast<int>(_modes.size());
-					_mode = ((_mode + (pressed[6] ? 1 : -1)) % n + n) % n;
-					_modeLabel = _modes[static_cast<std::size_t>(_mode)].label;
+					_mode = ((_mode + (pressed[4] ? 1 : -1)) % n + n) % n;
 					_lookTime = {};  // (the prompt shows it at once)
 				}
 				if (activatePressed) {
@@ -244,7 +253,7 @@ namespace fb
 		}
 
 		// the quit key, twice
-		if (pressed[4]) {
+		if (pressed[2]) {
 			const auto now = std::chrono::steady_clock::now();
 			if (_quitArmed && now - _quitAt < std::chrono::duration<float>(kQuitWindow)) {
 				EndGame("Bowling: game stopped");
@@ -263,20 +272,6 @@ namespace fb
 		const double edge = s.spec.laneHalfWidth - s.spec.ballRadius;
 		if (down[0] != down[1]) {
 			_releaseY = std::clamp(_releaseY + (down[0] ? 1.0 : -1.0) * s.moveSpeed * a_dt, -edge, edge);
-		}
-		// hook: a press steps it, holding repeats
-		if (down[2] != down[3]) {
-			const float dir = down[2] ? 1.0f : -1.0f;
-			if (pressed[2] || pressed[3]) {
-				_hook = std::clamp(_hook + dir * s.hookStep, -100.0f, 100.0f);
-				_hookRepeat = -0.35f;
-			} else {
-				_hookRepeat += a_dt;
-				if (_hookRepeat >= 0.08f) {
-					_hookRepeat = 0.0f;
-					_hook = std::clamp(_hook + dir * s.hookStep, -100.0f, 100.0f);
-				}
-			}
 		}
 		// the throw: hold the left button and pull back, let go
 		if (_phase == Phase::kAiming) {
@@ -324,11 +319,19 @@ namespace fb
 		std::scoped_lock lock(_hudMutex);
 		if (_lookLane) {
 			_hud.prompt = std::format("{}) START BOWLING", util::Upper(Settings::Key(_activateVk)));
-			const auto& mode = _modes.empty() ? std::string("SOLO") : _modes[static_cast<std::size_t>(_mode)].label;
-			_hud.promptSub = std::format("<  {}  >     LANE {}", mode, _lookLane->number);
+			const Mode* mode = _modes.empty() ? nullptr : &_modes[static_cast<std::size_t>(_mode)];
+			_hud.promptSub = std::format("<  {}  >     LANE {}", mode ? mode->label : std::string("SOLO"), _lookLane->number);
+			_hud.promptVs.clear();
+			if (mode && !mode->names.empty()) {
+				_hud.promptVs = "VS ";
+				for (std::size_t i = 0; i < mode->names.size(); ++i) {
+					_hud.promptVs += (i ? ", " : "") + mode->names[i];
+				}
+			}
 		} else {
 			_hud.prompt.clear();
 			_hud.promptSub.clear();
+			_hud.promptVs.clear();
 		}
 	}
 
@@ -431,33 +434,36 @@ namespace fb
 			std::scoped_lock lock(_hudMutex);
 			_hud.prompt.clear();
 			_hud.promptSub.clear();
+			_hud.promptVs.clear();
 		}
 
-		// who's bowling: you (by name) and anyone sharing your keyboard, then the companions you're playing
+		// who's bowling: you (by name), then the people you're playing; each bowls their own way, the same every game
 		_bowlers.clear();
-		const std::string you = PlayerName();
-		for (int p = 0; p < std::max(1, a_mode.humans); ++p) {
+		Bowler me;
+		me.name = PlayerName();
+		_bowlers.push_back(me);
+		const auto addAi = [&](const std::string& a_name, std::uint32_t a_id, RE::ObjectRefHandle a_actor) {
+			const std::uint32_t seed = a_id * 2654435761u;
 			Bowler b;
-			b.name = p == 0 ? you : std::format("PLAYER {}", p + 1);
-			_bowlers.push_back(b);
-		}
-		for (const auto& h : a_mode.npcs) {
-			auto  ref = h.get();
-			auto* actor = ref ? ref->As<RE::Actor>() : nullptr;
-			if (!actor || _bowlers.size() >= 4) {
-				continue;
-			}
-			// each companion bowls their own way, the same every game: how good, and which hand
-			const std::uint32_t seed = actor->GetFormID() * 2654435761u;
-			Bowler b;
-			b.name = NameOf(actor);
+			b.name = a_name;
 			b.ai = true;
 			b.skill = 0.35f + static_cast<float>((seed >> 8) % 45) / 100.0f;
 			b.leftHanded = (seed >> 20) % 8 == 0;
-			b.actor = h;
+			b.actor = a_actor;
 			_bowlers.push_back(b);
-			log::info("{} ({:08X}) bowls: skill {:.2f}, {}-handed", b.name, actor->GetFormID(), b.skill, b.leftHanded ? "left" : "right");
+			log::info("{} ({:08X}) bowls: skill {:.2f}, {}-handed", b.name, a_id, b.skill, b.leftHanded ? "left" : "right");
+		};
+		for (std::size_t i = 0; i < a_mode.names.size() && _bowlers.size() < 4; ++i) {
+			auto  ref = i < a_mode.npcs.size() ? a_mode.npcs[i].get() : RE::NiPointer<RE::TESObjectREFR>{};
+			auto* actor = ref ? ref->As<RE::Actor>() : nullptr;
+			if (actor && !actor->IsDead(false) && !actor->IsDisabled()) {
+				addAi(NameOf(actor), actor->GetFormID(), a_mode.npcs[i]);
+			} else {
+				// (a regular: no one in the world, just a name on the sheet)
+				addAi(a_mode.names[i], 0x100u + static_cast<std::uint32_t>(i) * 977u + static_cast<std::uint32_t>(a_mode.names[i].size()), {});
+			}
 		}
+		HoldOpponents(true);
 		const int players = static_cast<int>(_bowlers.size());
 		_names.clear();
 		for (const auto& b : _bowlers) {
@@ -501,6 +507,41 @@ namespace fb
 		log::info("game on lane {}: {}", a_lane.number, a_mode.label);
 	}
 
+	void Game::HoldOpponents(bool a_hold)
+	{
+		// the people you're playing stay put for the game (restrained: they stand where they are, still turning and
+		// idling), and are let go after. Only those we held are let go
+		const auto run = [](RE::TESObjectREFR* a_ref, std::string_view a_command) {
+			auto* factory = RE::ConcreteFormFactory<RE::Script>::GetFormFactory();
+			auto* script = factory ? factory->Create() : nullptr;
+			if (!script) {
+				return;
+			}
+			RE::ScriptCompiler compiler;
+			script->SetText(a_command);
+			script->CompileAndRun(&compiler, RE::COMPILER_NAME::kSystemWindow, a_ref);
+			delete script;
+		};
+		if (a_hold) {
+			_held.clear();
+			for (const auto& b : _bowlers) {
+				auto  ref = b.actor.get();
+				auto* actor = ref ? ref->As<RE::Actor>() : nullptr;
+				if (actor && !actor->IsDead(false)) {
+					run(actor, "SetRestrained 1");
+					_held.push_back(b.actor);
+				}
+			}
+		} else {
+			for (const auto& h : _held) {
+				if (auto ref = h.get()) {
+					run(ref.get(), "SetRestrained 0");
+				}
+			}
+			_held.clear();
+		}
+	}
+
 	void Game::EndGame(const std::string& a_why)
 	{
 		if (_phase == Phase::kNone) {
@@ -520,6 +561,7 @@ namespace fb
 			remove(b.ref);
 		}
 		RestoreVanilla();
+		HoldOpponents(false);
 		Audio::StopRoll();
 		_charging = false;
 		BlockControls(false);
@@ -586,6 +628,7 @@ namespace fb
 		_aiPlanned = false;
 		_rackFullAtThrow = _sim->StandingCount() >= 6;
 		_lastCrash = -1.0;
+		_lastPinSound = -1.0;
 		_sim->Throw(r);
 		Audio::Play(Audio::Bank::kRelease, HeldPoint(), 0.35f + 0.65f * power);
 		_balls[static_cast<std::size_t>(_active)].at = BallAt::kLane;
@@ -660,7 +703,6 @@ namespace fb
 		} else {
 			_sim->Sweep();
 		}
-		Audio::Play(Audio::Bank::kMachine, lanes::ToWorld(*_lane, _sim->GetSpec().headPin + 40.0, 0.0, 30.0), 0.8f);
 		// the ball at the front of the return is the one picked up; the other rolls up behind it
 		int pick = -1;
 		for (int b = 0; b < 2; ++b) {
@@ -678,6 +720,10 @@ namespace fb
 			_releaseY = up.releaseY;
 			_hook = up.hook;
 			_aimAngle = up.aim;
+		} else {
+			_releaseY = 0.0;  // (an NPC picks the ball up in the middle)
+			_hook = 0.0f;
+			_aimAngle = 0.0f;
 		}
 		_aiPlanned = false;
 		auto& ball = _balls[static_cast<std::size_t>(_active)];
@@ -713,8 +759,9 @@ namespace fb
 		_aiPlan = bowl::PlanThrow(_sim->GetSpec(), _sim->Pins(), who.skill, who.leftHanded, limits);
 		_aiPlanned = true;
 		_phaseTime = 0.0f;
-		// shown on the lane like your own: where they stand, their line, their spin
-		_releaseY = _aiPlan.release.y;
+		// they start in the middle and walk over to where they'll throw from (the tick moves them)
+		_releaseY = 0.0;
+		_aiThereAt = -1.0f;
 		_aimAngle = static_cast<float>(_aiPlan.release.angle);
 		_hook = s.maxHook > 0.0f ? static_cast<float>(_aiPlan.release.axis * 180.0 / kPi / s.maxHook * 100.0) : 0.0f;
 		_swingHook = 0.0f;
@@ -741,50 +788,58 @@ namespace fb
 
 	void Game::BuildModes()
 	{
-		// you alone or with friends at the keyboard, then you against each companion nearby, then all of them
+		// solo, or you against 1 to 3 others: your companions first, then the nearest friendly people (and robots)
+		// around the lanes; anyone short is made up by one of the alley's regulars
 		static auto* companionFaction = RE::TESForm::GetFormByID<RE::TESFaction>(0x00023C01);  // CurrentCompanionFaction
 		static auto* npcType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x00013794);           // ActorTypeNPC
 		static auto* robotType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x0002CB73);         // ActorTypeRobot
 		auto*        player = RE::PlayerCharacter::GetSingleton();
 		auto*        cell = player ? player->GetParentCell() : nullptr;
-		std::vector<RE::Actor*> companions;
-		if (cell && companionFaction) {
-			cell->ForEachReferenceInRange(player->data.location, 1500.0f, [&](RE::TESObjectREFR* a_ref) {
+		struct Near
+		{
+			RE::Actor* actor;
+			bool       companion;
+			float      distance;
+		};
+		std::vector<Near> nearby;
+		if (cell) {
+			const auto at = player->data.location;
+			cell->ForEachReferenceInRange(at, kOpponentRange, [&](RE::TESObjectREFR* a_ref) {
 				auto* actor = a_ref && a_ref != player ? a_ref->As<RE::Actor>() : nullptr;
-				if (!actor || actor->IsDisabled() || actor->IsDead(false) || !actor->IsInFaction(companionFaction)) {
+				if (!actor || actor->IsDisabled() || actor->IsDead(false) || actor->IsChild() || actor->IsInCombat() ||
+					actor->GetHostileToActor(player)) {
 					return RE::BSContainer::ForEachResult::kContinue;
 				}
 				// people and robots bowl; a dog doesn't
 				const bool person = (npcType && actor->HasKeywordHelper(npcType, nullptr)) || (robotType && actor->HasKeywordHelper(robotType, nullptr));
-				if (person && companions.size() < 3) {
-					companions.push_back(actor);
+				const char* name = actor->GetDisplayFullName();
+				if (person && name && *name) {
+					const auto d = actor->data.location - at;
+					nearby.push_back({ actor, companionFaction && actor->IsInFaction(companionFaction), std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z) });
 				}
 				return RE::BSContainer::ForEachResult::kContinue;
 			});
 		}
-		const std::string you = PlayerName();
+		std::stable_sort(nearby.begin(), nearby.end(), [](const Near& a_l, const Near& a_r) {
+			return a_l.companion != a_r.companion ? a_l.companion : a_l.distance < a_r.distance;
+		});
+
 		std::vector<Mode> modes;
-		modes.push_back({ "SOLO", 1, {} });
-		for (auto* c : companions) {
-			modes.push_back({ std::format("{} VS {}", you, NameOf(c)), 1, { c->GetHandle() } });
-		}
-		if (companions.size() >= 2) {
-			Mode all{ std::format("{} VS EVERYONE", you), 1, {} };
-			for (auto* c : companions) {
-				all.npcs.push_back(c->GetHandle());
+		for (int players = 1; players <= 4; ++players) {
+			Mode m;
+			m.label = players == 1 ? std::string("SOLO") : std::format("{} PLAYERS", players);
+			for (int o = 0; o < players - 1; ++o) {
+				if (o < static_cast<int>(nearby.size())) {
+					m.npcs.push_back(nearby[static_cast<std::size_t>(o)].actor->GetHandle());
+					m.names.push_back(NameOf(nearby[static_cast<std::size_t>(o)].actor));
+				} else {
+					++m.regulars;
+					m.names.push_back(kRegulars[static_cast<std::size_t>(o)]);
+				}
 			}
-			modes.push_back(all);
+			modes.push_back(std::move(m));
 		}
-		for (int n = 2; n <= 4; ++n) {
-			modes.push_back({ std::format("{} PLAYERS", n), n, {} });
-		}
-		// (stay on the same choice as companions come and go)
-		_mode = 0;
-		for (std::size_t i = 0; i < modes.size(); ++i) {
-			if (modes[i].label == _modeLabel) {
-				_mode = static_cast<int>(i);
-			}
-		}
+		_mode = std::clamp(_mode, 0, static_cast<int>(modes.size()) - 1);
 		_modes = std::move(modes);
 	}
 
@@ -814,26 +869,28 @@ namespace fb
 				if (_sim->TimeSinceThrow() - _lastCrash > 0.35) {
 					_lastCrash = _sim->TimeSinceThrow();
 					if (_rackFullAtThrow && hard > 250.0f) {
-						Audio::Play(Audio::Bank::kCrash, at, 0.5f + hard / 1200.0f);
+						Audio::Play(Audio::Bank::kCrash, at, std::min(0.85f, 0.45f + hard / 1500.0f));
 					} else {
-						Audio::Play(Audio::Bank::kHit, at, 0.35f + hard / 1200.0f);
+						Audio::Play(Audio::Bank::kHit, at, std::min(0.7f, 0.3f + hard / 1500.0f));
 					}
 				}
 				break;
 			case bowl::Event::Kind::kPinPin:
 			case bowl::Event::Kind::kPinDeck:
 			case bowl::Event::Kind::kPinWall:
-				if (hard > 60.0f && pins < 4) {
+				// (a couple a tick, a few hundredths of a second apart: a clatter, not a buzz)
+				if (hard > 60.0f && pins < 2 && _sim->TimeSinceThrow() - _lastPinSound > 0.03) {
 					++pins;
-					const float pitch = e.kind == bowl::Event::Kind::kPinPin ? 1.0f : e.kind == bowl::Event::Kind::kPinDeck ? 0.8f : 0.7f;
-					Audio::Play(Audio::Bank::kPin, at, std::min(0.9f, hard / 700.0f), pitch);
+					_lastPinSound = _sim->TimeSinceThrow();
+					const float pitch = e.kind == bowl::Event::Kind::kPinPin ? 1.0f : e.kind == bowl::Event::Kind::kPinDeck ? 0.85f : 0.8f;
+					Audio::Play(Audio::Bank::kPin, at, std::min(0.55f, hard / 900.0f), pitch);
 				}
 				break;
 			case bowl::Event::Kind::kPinPit:
-				Audio::Play(Audio::Bank::kPin, at, 0.25f, 0.6f);
+				Audio::Play(Audio::Bank::kPin, at, 0.2f, 0.75f);
 				break;
 			case bowl::Event::Kind::kBallPit:
-				Audio::Play(Audio::Bank::kPin, at, 0.45f, 0.45f);  // (a dull thump into the back of the machine)
+				Audio::Play(Audio::Bank::kPin, at, 0.35f, 0.6f);  // (a dull thump into the back of the machine)
 				break;
 			}
 		}
@@ -846,7 +903,7 @@ namespace fb
 		_guide.clear();
 		const auto& s = Settings::Get();
 		auto*       camera = RE::Main::WorldRootCamera();
-		if (!s.guide || _phase != Phase::kAiming || !_lane || !_sim || !camera) {
+		if (!s.guide || _phase != Phase::kAiming || AiTurn() || !_lane || !_sim || !camera) {  // (an NPC's line is theirs to know)
 			return;
 		}
 		const auto&  spec = _sim->GetSpec();
@@ -1148,7 +1205,6 @@ namespace fb
 					ball.target = frontTaken ? s.returnSpot2 : s.returnSpot1;
 					ball.pos = ReturnPoint(ball.along, s.returnZ);
 					hidden = false;
-					Audio::Play(Audio::Bank::kReturn, ball.pos, 0.7f);
 				}
 				break;
 			}
@@ -1170,6 +1226,7 @@ namespace fb
 			b = {};
 		}
 		_hiddenVanilla.clear();
+		_held.clear();  // (they were let go before any save, so the loaded game has them free)
 		_charging = false;
 		_inCamera = false;
 		_haveEntryView = false;

@@ -64,8 +64,6 @@ namespace fb
 	{
 		keyLeft = ReadKey(L"iLeft", keyLeft);
 		keyRight = ReadKey(L"iRight", keyRight);
-		keyHookLeft = ReadKey(L"iHookLeft", keyHookLeft);
-		keyHookRight = ReadKey(L"iHookRight", keyHookRight);
 		keyFewer = ReadKey(L"iFewerPlayers", keyFewer);
 		keyMore = ReadKey(L"iMorePlayers", keyMore);
 		keyQuit = ReadKey(L"iQuit", keyQuit);
@@ -79,7 +77,6 @@ namespace fb
 		maxAim = std::clamp(ReadFloat(L"Throw", L"fMaxAim", maxAim), 0.0f, 20.0f);
 		revs = std::clamp(ReadFloat(L"Throw", L"fRevs", revs), 0.0f, 150.0f);
 		maxHook = std::clamp(ReadFloat(L"Throw", L"fMaxHook", maxHook), 0.0f, 89.0f);
-		hookStep = std::clamp(ReadFloat(L"Throw", L"fHookStep", hookStep), 1.0f, 50.0f);
 		spinPerCount = std::clamp(ReadFloat(L"Throw", L"fSpinPerCount", spinPerCount), 0.0f, 10.0f);
 		moveSpeed = std::clamp(ReadFloat(L"Throw", L"fMoveSpeed", moveSpeed), 5.0f, 400.0f);
 		inaccuracy = std::clamp(ReadFloat(L"Throw", L"fInaccuracy", inaccuracy), 0.0f, 10.0f);

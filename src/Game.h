@@ -23,7 +23,8 @@ namespace fb
 		struct HudState
 		{
 			std::string              prompt;      // "F) START BOWLING", under the crosshair at a ball return
-			std::string              promptSub;   // "< 1 PLAYER >"
+			std::string              promptSub;   // "<  3 PLAYERS  >     LANE 3"
+			std::string              promptVs;    // "VS CAIT, PRESTON GARVEY"
 			bool                     game{ false };
 			int                      lane{ 0 };
 			std::vector<std::string> names;
@@ -95,13 +96,16 @@ namespace fb
 		void UpdateLook();
 		const lanes::Lane* LookedAtLane() const;
 
-		// who's playing: you (and friends at one keyboard), or you against companions
+		// who's playing: you alone, or you against 1 to 3 others (companions, then people nearby, then regulars)
 		struct Mode
 		{
-			std::string                      label;   // "2 PLAYERS", "NATE VS CAIT"
-			int                              humans{ 1 };
-			std::vector<RE::ObjectRefHandle> npcs;
+			std::string                      label;   // "SOLO", "3 PLAYERS"
+			std::vector<RE::ObjectRefHandle> npcs;    // the people nearby you'd play, in order
+			std::vector<std::string>         names;   // every opponent's name: those people, then any regulars
+			int                              regulars{ 0 };
 		};
+		static constexpr float kOpponentRange = 1500.0f;  // how near someone has to be to be asked to bowl
+		static constexpr std::array<const char*, 3> kRegulars{ "SAL", "DOT", "HANK" };  // (the alley's regulars, when no one's around)
 		struct Bowler
 		{
 			std::string         name;
@@ -118,6 +122,7 @@ namespace fb
 		static std::string NameOf(RE::Actor* a_actor);
 
 		void StartGame(const lanes::Lane& a_lane, const Mode& a_mode);
+		void HoldOpponents(bool a_hold);
 		void PlanAiThrow();
 		bool AiTurn() const;
 		void EndGame(const std::string& a_why);
@@ -161,14 +166,16 @@ namespace fb
 		std::vector<Mode>                        _modes;
 		int                                      _mode{ 0 };
 		bool                                     _aiPlanned{ false };
+		float                                    _aiThereAt{ -1.0f };  // (when an NPC got to their spot)
 		bowl::AiThrow                            _aiPlan;
 		std::array<RE::ObjectRefHandle, 10>      _pins{};
 		std::array<bool, 10>                     _pinPrepared{};
 		std::array<BallSlot, 2>                  _balls{};
 		int                                      _active{ 0 };     // the ball in play
 		std::vector<RE::ObjectRefHandle>         _hiddenVanilla;   // pins and balls we disabled
+		std::vector<RE::ObjectRefHandle>         _held;            // the people playing, kept where they stand
 		double                                   _releaseY{ 0.0 };
-		float                                    _hook{ 0.0f };    // percent of full hook, + to the left
+		float                                    _hook{ 0.0f };    // percent of full hook, + to the left (an AI's planned spin; yours comes from the swing)
 		float                                    _swingHook{ 0.0f };  // what this swing adds to the hook (sideways mouse)
 		float                                    _lastPower{ 0.6f };
 		float HookNow() const { return std::clamp(_hook + _swingHook, -100.0f, 100.0f); }
@@ -178,19 +185,18 @@ namespace fb
 		bool                                     _lastBallGutter{ false };
 		bool                                     _rackFullAtThrow{ false };
 		double                                   _lastCrash{ -1.0 };
+		double                                   _lastPinSound{ -1.0 };
 		std::chrono::steady_clock::time_point    _lastTick{};
 		bool                                     _haveLastTick{ false };
 
 		// input
 		std::atomic<bool>                        _tickPending{ false };
-		std::string                              _modeLabel;        // (the picked mode, kept as the list changes)
 		const lanes::Lane*                       _lookLane{ nullptr };
 		std::chrono::steady_clock::time_point    _lookTime{};
 		int                                      _activateVk{ 0x46 };  // F, until the control map says otherwise
 		bool                                     _activateWasDown{ true };
 		bool                                     _lmbWasDown{ true };
-		std::array<bool, 7>                      _keyWasDown{};
-		float                                    _hookRepeat{ 0.0f };
+		std::array<bool, 5>                      _keyWasDown{};
 		std::chrono::steady_clock::time_point    _quitAt{};
 		bool                                     _quitArmed{ false };
 		std::atomic<bool>                        _charging{ false };

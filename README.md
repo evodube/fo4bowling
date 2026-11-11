@@ -4,16 +4,17 @@ Playable bowling for Fallout 4, at Back Alley Bowling in the General Atomics Gal
 nothing in the cell is edited (its precombines and previs stay as they are).
 
 Lanes 3 and 6 are the two without wreckage on them. Walk up to either one's ball return, look at it and press the
-activate key (F). The left and right arrows there pick who plays: solo, you against a companion who's with you (or
-all of them), or 2 to 4 players taking turns at one keyboard.
+activate key (F). The left and right arrows there pick how many play: solo, or 2 to 4 players, which is you against
+1 to 3 others. Your companions are asked first, then the nearest friendly people (and robots) around the lanes; if
+there aren't enough, the alley's regulars (Sal, Dot and Hank) make up the numbers. The prompt shows who you'd be
+playing. The people you're playing stay where they are until the game's over.
 
 ## Playing
 
 - **Aim** by moving the mouse sideways. The camera stays still behind the ball; a green line shows your aim.
 - **A / D** move you along the foul line (the HUD shows which board you're on).
-- **W / S** set the spin: W hooks left (a right-hander's hook), S hooks right.
-- **Hold the left mouse button**, pull the mouse back for power and move it sideways for extra spin, then let go.
-  Letting go at 0% cancels.
+- **Hold the left mouse button**, pull the mouse back for power and move it sideways for spin (left hooks left, a
+  right-hander's hook; right hooks right), then let go. Letting go at 0% cancels.
 - **X twice** stops the game.
 
 The ball skids through the oil on the front of the lane and hooks once it reaches the dry back end, so a hook ball
@@ -26,11 +27,11 @@ kickbacks and drop into the gutters and the pit. Ten frames with strikes, spares
 scored on the HUD's sheet under everyone's names.
 
 The sounds are real bowling alley recordings (CC0, from Freesound; see `Data\Sound\fo4bowling\CREDITS.txt`): the
-ball landing and rolling down the lane, the crash into the rack, pins clattering, the pinsetter and the ball coming
-back up the return, each heard from where it happens.
+ball landing and rolling down the lane, the crash into the rack and pins clattering, each heard from where it
+happens.
 
-Companions bowl with their own skill and hand (the same every game): they line up the pocket for a strike and the
-key pin for a spare, and miss the way people do.
+Your opponents bowl with their own skill and hand (the same every game): each picks the ball up in the middle, walks
+over to their spot, lines up the pocket for a strike or the key pin for a spare, and misses the way people do.
 
 You need [F4SE](https://f4se.silverlock.org/) and the Address Library. The HUD (score sheet, meters, calls) needs
 F4SE Menu Framework; without it the game still plays and the calls come up as the game's own notifications.

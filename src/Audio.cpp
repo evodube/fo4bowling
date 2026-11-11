@@ -15,7 +15,8 @@ namespace fb::Audio
 {
 	namespace
 	{
-		constexpr std::size_t   kVoices = 24;
+		constexpr std::size_t   kVoices = 32;
+		constexpr int           kMaxPinVoices = 8;  // (pins clattering: past this many at once, more just adds mush)
 		constexpr std::uint32_t kRate = 44100;
 
 		struct Clip
@@ -27,6 +28,7 @@ namespace fb::Audio
 		{
 			IXAudio2SourceVoice*                  voice{ nullptr };
 			std::chrono::steady_clock::time_point started{};
+			Bank                                  bank{ Bank::kCount };
 		};
 
 		std::mutex                                                            g_lock;
@@ -38,6 +40,7 @@ namespace fb::Audio
 		std::array<Voice, kVoices>                                            g_voices;
 		IXAudio2SourceVoice*                                                  g_roll{ nullptr };
 		bool                                                                  g_rolling{ false };
+		std::optional<std::chrono::steady_clock::time_point>                  g_rollStopAt;  // (faded out, stopped then)
 		RE::NiPoint3                                                          g_ear{};
 		float                                                                 g_yaw{ 0.0f };
 		bool                                                                  g_haveEar{ false };
@@ -96,9 +99,19 @@ namespace fb::Audio
 			case Bank::kCrash: return L"crash";
 			case Bank::kHit: return L"hit";
 			case Bank::kPin: return L"pin";
-			case Bank::kReturn: return L"return";
-			case Bank::kMachine: return L"machine";
 			default: return L"";
+			}
+		}
+
+		int Takes(Bank a_bank)
+		{
+			switch (a_bank) {
+			case Bank::kRelease: return 2;
+			case Bank::kRoll: return 1;
+			case Bank::kCrash: return 3;
+			case Bank::kHit: return 4;
+			case Bank::kPin: return 4;
+			default: return 0;
 			}
 		}
 
@@ -145,9 +158,12 @@ namespace fb::Audio
 			return true;
 		}
 
-		Voice* FreeVoice()
+		// a voice that's done playing. None free (or too many pins already): the new sound is dropped. Nothing is ever
+		// cut off mid-sound, which clicks
+		Voice* FreeVoice(Bank a_bank)
 		{
-			Voice* oldest = nullptr;
+			Voice* free = nullptr;
+			int    pins = 0;
 			for (auto& v : g_voices) {
 				if (!v.voice) {
 					continue;
@@ -155,17 +171,24 @@ namespace fb::Audio
 				XAUDIO2_VOICE_STATE state{};
 				v.voice->GetState(&state, XAUDIO2_VOICE_NOSAMPLESPLAYED);
 				if (state.BuffersQueued == 0) {
-					return &v;
-				}
-				if (!oldest || v.started < oldest->started) {
-					oldest = &v;
+					free = free ? free : &v;
+				} else if (v.bank == Bank::kPin) {
+					++pins;
 				}
 			}
-			if (oldest) {  // all busy: cut off the oldest
-				oldest->voice->Stop();
-				oldest->voice->FlushSourceBuffers();
+			return a_bank == Bank::kPin && pins >= kMaxPinVoices ? nullptr : free;
+		}
+
+		// the rolling loop is faded out (its levels to 0, which XAudio2 ramps) and stopped a moment later
+		void FinishRollStop()
+		{
+			if (g_rollStopAt && std::chrono::steady_clock::now() >= *g_rollStopAt) {
+				if (g_roll) {
+					g_roll->Stop();
+					g_roll->FlushSourceBuffers();
+				}
+				g_rollStopAt.reset();
 			}
-			return oldest;
 		}
 
 		// the gains for each speaker for a sound at a_pos: quieter with distance, panned by direction. False: too far
@@ -224,7 +247,8 @@ namespace fb::Audio
 		const auto folder = SoundFolder();
 		int        loaded = 0;
 		for (std::size_t b = 0; b < g_banks.size(); ++b) {
-			for (int i = 1; i <= 16; ++i) {
+			// (just the takes this version ships: an older install's extra files, left in the folder, stay unused)
+			for (int i = 1; i <= Takes(static_cast<Bank>(b)); ++i) {
 				Clip clip;
 				if (!LoadWav(folder / std::format(L"{}_{}.wav", BankName(static_cast<Bank>(b)), i), clip)) {
 					break;
@@ -248,6 +272,7 @@ namespace fb::Audio
 		g_ear = a_pos;
 		g_yaw = a_yaw;
 		g_haveEar = a_valid;
+		FinishRollStop();
 	}
 
 	void Play(Bank a_bank, const RE::NiPoint3& a_pos, float a_gain, float a_pitch)
@@ -257,6 +282,7 @@ namespace fb::Audio
 			return;
 		}
 		std::scoped_lock lock(g_lock);
+		FinishRollStop();
 		const auto& clips = g_banks[static_cast<std::size_t>(a_bank)];
 		if (!g_engine || clips.empty()) {
 			return;
@@ -265,10 +291,11 @@ namespace fb::Audio
 		if (!Mix(a_pos, std::min(1.0f, a_gain), matrix)) {
 			return;
 		}
-		Voice* v = FreeVoice();
+		Voice* v = FreeVoice(a_bank);
 		if (!v) {
 			return;
 		}
+		v->bank = a_bank;
 		const auto&    clip = clips[static_cast<std::size_t>(Random01() * static_cast<float>(clips.size())) % clips.size()];
 		XAUDIO2_BUFFER buffer{};
 		buffer.Flags = XAUDIO2_END_OF_STREAM;
@@ -291,20 +318,12 @@ namespace fb::Audio
 		if (!s.sound || !g_engine || !g_roll || clips.empty()) {
 			return;
 		}
-		if (!g_rolling) {
-			// the loop, round and round until stopped
-			const auto&    clip = clips[static_cast<std::size_t>(Random01() * static_cast<float>(clips.size())) % clips.size()];
-			XAUDIO2_BUFFER buffer{};
-			buffer.AudioBytes = static_cast<UINT32>(clip.data.size());
-			buffer.pAudioData = clip.data.data();
-			buffer.LoopCount = XAUDIO2_LOOP_INFINITE;
+		if (g_rollStopAt) {
+			// still fading from the last ball (silent by now or nearly): stop it before starting again
 			g_roll->Stop();
 			g_roll->FlushSourceBuffers();
-			if (FAILED(g_roll->SubmitSourceBuffer(&buffer))) {
-				return;
-			}
-			g_roll->Start();
-			g_rolling = true;
+			g_rollStopAt.reset();
+			g_rolling = false;
 		}
 		std::vector<float> matrix;
 		if (!Mix(a_pos, std::clamp(a_gain, 0.0f, 1.0f), matrix)) {
@@ -312,14 +331,28 @@ namespace fb::Audio
 		}
 		g_roll->SetOutputMatrix(g_master, 1, g_channels, matrix.data());
 		g_roll->SetFrequencyRatio(std::clamp(a_pitch, 0.5f, 2.0f));
+		if (!g_rolling) {
+			// the loop, round and round until stopped (its levels are set above, before it starts)
+			const auto&    clip = clips[static_cast<std::size_t>(Random01() * static_cast<float>(clips.size())) % clips.size()];
+			XAUDIO2_BUFFER buffer{};
+			buffer.AudioBytes = static_cast<UINT32>(clip.data.size());
+			buffer.pAudioData = clip.data.data();
+			buffer.LoopCount = XAUDIO2_LOOP_INFINITE;
+			if (FAILED(g_roll->SubmitSourceBuffer(&buffer))) {
+				return;
+			}
+			g_roll->Start();
+			g_rolling = true;
+		}
 	}
 
 	void StopRoll()
 	{
 		std::scoped_lock lock(g_lock);
 		if (g_roll && g_rolling) {
-			g_roll->Stop();
-			g_roll->FlushSourceBuffers();
+			const std::vector<float> silent(g_channels, 0.0f);
+			g_roll->SetOutputMatrix(g_master, 1, g_channels, silent.data());
+			g_rollStopAt = std::chrono::steady_clock::now() + std::chrono::milliseconds(80);
 		}
 		g_rolling = false;
 	}

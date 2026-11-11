@@ -1252,6 +1252,7 @@ namespace fb
 		_hiddenVanilla.clear();
 		_deck = {};
 		_sweep = {};
+		_lights = {};
 		_held.clear();  // (they were let go before any save, so the loaded game has them free)
 		_charging = false;
 		_inCamera = false;

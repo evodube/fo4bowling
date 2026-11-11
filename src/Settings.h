@@ -75,6 +75,9 @@ namespace fb
 		bool  pinsetter{ true };
 		float deckHeight{ 110.0f };   // where the deck waits, its underside above the lane
 		float sweepHeight{ 100.0f };  // where the sweep bar waits
+		bool          pinLights{ true };               // lights over the pins while a game's on
+		std::uint32_t pinLightForm{ 0x0010C56A };      // the light used (instituteLightWarm01NS: warm, bright, no shadows)
+		float         pinLightHeight{ 70.0f };         // how high they hang over the lane
 
 		// [HUD]
 		float hudScale{ 1.0f };

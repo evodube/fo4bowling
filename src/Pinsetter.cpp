@@ -117,7 +117,20 @@ namespace fb
 	void Game::SpawnMachine(const lanes::Lane& a_lane)
 	{
 		RemoveMachine();
-		if (!Settings::Get().pinsetter) {
+		const auto& cfg = Settings::Get();
+		// lights in the machine, shining on the pins: one in front of the rack, one over it (non-shadowing, so the deck
+		// doesn't block them)
+		if (cfg.pinLights) {
+			if (auto* light = Piece(cfg.pinLightForm); light && light->GetFormType() == RE::ENUM_FORM_ID::kLIGH) {
+				const double front = cfg.spec.kickbackStart - 20.0;
+				const double over = cfg.spec.headPin + cfg.spec.pinSpacing * 1.5;
+				_lights[0] = Spawn(light, lanes::ToWorld(a_lane, front, 0.0, cfg.pinLightHeight));
+				_lights[1] = Spawn(light, lanes::ToWorld(a_lane, over, 0.0, cfg.pinLightHeight + 20.0));
+			} else {
+				log::warn("pinsetter: {:08X} isn't a light; no lights over the pins", cfg.pinLightForm);
+			}
+		}
+		if (!cfg.pinsetter) {
 			return;
 		}
 		auto* deck = Piece(kDeckBase);
@@ -134,7 +147,7 @@ namespace fb
 
 	void Game::RemoveMachine()
 	{
-		for (auto* h : { &_deck, &_sweep }) {
+		for (auto* h : { &_deck, &_sweep, &_lights[0], &_lights[1] }) {
 			if (auto ref = h->get()) {
 				ref->Disable();
 				ref->SetWantsDelete(true);

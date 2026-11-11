@@ -190,6 +190,7 @@ namespace fb
 		std::array<bool, 10>                     _pinPrepared{};
 		RE::ObjectRefHandle                      _deck;
 		RE::ObjectRefHandle                      _sweep;
+		std::array<RE::ObjectRefHandle, 2>       _lights{};
 		bool                                     _deckPrepared{ false };
 		bool                                     _sweepPrepared{ false };
 		bool                                     _setFresh{ false };

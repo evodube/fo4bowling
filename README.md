@@ -23,9 +23,9 @@ lane drifts each ball a touch left or right, and the pinsetter never spots the p
 
 Between balls a pinsetter does its job: the sweep bar drops in front of the pins, the deck comes down and lifts
 any pins still standing, the sweep clears the fallen ones back into the pit, and the deck sets the pins (or a fresh
-rack) down again. The lane's own machine is part of the cell's precombined scenery and can't move, so the sweep
-and deck are our own, built from the game's machine-kit pieces (`[Pinsetter]` in the INI turns it off or moves
-where they wait).
+rack) down again. The deck is a copy of the alley's own pinsetter machine (the rollers-and-pistons unit behind
+each lane's pit, which is part of the cell's precombined scenery and can't move), and the sweep is a machine-kit
+bar to match (`[Pinsetter]` in the INI turns it off or moves where they wait).
 
 The pins are real rigid bodies: they fly, tumble, roll on their sides, wobble on their bases, bounce off the
 kickbacks and drop into the gutters and the pit. Ten frames with strikes, spares and the tenth frame's extra balls,

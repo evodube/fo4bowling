@@ -1,6 +1,7 @@
-// The pinsetter: our own sweep bar and setting deck over the lane's pin deck, made from the game's machine-kit
-// pieces. The lane's own machine (behind the pit) is part of the cell's precombined mesh and can't move, so these
-// are ordinary references we place ourselves, like the pins.
+// The pinsetter: our own sweep bar and setting deck over the lane's pin deck. The deck is a copy of the alley's own
+// machine (Machine_Bowling02, the rollers-and-pistons unit that sits low behind each lane's pit): the ones in the
+// cell are part of its precombined mesh and can't move, so ours is an ordinary reference we place ourselves, like
+// the pins. The sweep bar is a machine-kit bar to match.
 //
 // After every ball (unless the game's over):
 //   second ball to come: the sweep comes down in front of the pins, the deck comes down and lifts the standing pins,
@@ -21,12 +22,13 @@ namespace fb
 {
 	namespace
 	{
-		constexpr RE::TESFormID kDeckBase = 0x00135F6C;   // MacBasePanelBMed01: 98 x 84 x 9, its foot at z 0
-		constexpr RE::TESFormID kSweepBase = 0x000F2C32;  // GreenHsCenterRoofTopBeam01: 256 long, 14 deep, z -4..8
-		constexpr float         kDeckScale = 1.15f;       // -> 113 across the lane, 97 deep
-		constexpr float         kSweepScale = 0.875f;     // -> 224, kickback to kickback
-		constexpr double        kSweepBottom = 3.5;       // (the beam's foot below its origin, at that scale)
-		constexpr double        kSweepHalfDepth = 6.0;
+		constexpr RE::TESFormID kDeckBase = 0x0023E75B;   // Machine_Bowling02 (a static collection): 209 x 206, z -21..194
+		constexpr RE::TESFormID kSweepBase = 0x00136005;  // MacDetailGreeble26: a bar 118 long (y), 10 deep, z -4..4
+		constexpr float         kDeckScale = 0.6f;        // -> 125 x 124, 129 tall: over the whole rack
+		constexpr double        kDeckBottom = 21.0 * kDeckScale;  // (its underside below its origin)
+		constexpr float         kSweepScale = 1.9f;       // -> 224, kickback to kickback
+		constexpr double        kSweepBottom = 4.0 * kSweepScale;
+		constexpr double        kSweepHalfDepth = 5.0 * kSweepScale;
 		constexpr double        kGrab = 0.8;              // the deck's underside this far above a standing pin's head
 
 		using Keys = std::vector<std::array<double, 2>>;  // (time, value), eased between
@@ -105,11 +107,17 @@ namespace fb
 			return form && form->IsBoundObject() ? static_cast<RE::TESBoundObject*>(form) : nullptr;
 		}
 
-		// the machine's pieces lie across the lane: in the world their long x along +y, their y along -x (the lane
-		// runs towards -x), z up
-		RE::NiMatrix3 AcrossTheLane()
+		// the machine turned as the alley's own are (a quarter turn: its front towards the bowler)
+		RE::NiMatrix3 MachineFacing()
 		{
-			const double m[3][3]{ { 0.0, -1.0, 0.0 }, { 1.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 } };
+			const double m[3][3]{ { 0.0, 1.0, 0.0 }, { -1.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 } };
+			return util::NodeRotation(m);
+		}
+
+		// the bar as it comes: its length along the world's y, which is across the lane
+		RE::NiMatrix3 Straight()
+		{
+			const double m[3][3]{ { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } };
 			return util::NodeRotation(m);
 		}
 	}
@@ -256,10 +264,10 @@ namespace fb
 			sweepZ = At(plan.sweepZ, _phaseTime);
 			sweepX = At(plan.sweepX, _phaseTime);
 		}
-		const auto across = AcrossTheLane();
+
 		// the deck's middle over the middle of the rack
 		const double rackMiddle = spec.headPin + spec.pinSpacing * 3.0 * 0.866 * 0.5;
-		PlaceNode(deck.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, deckZ), across, false, kDeckScale);
-		PlaceNode(sweep.get(), lanes::ToWorld(*_lane, sweepX, 0.0, sweepZ + kSweepBottom), across, false, kSweepScale);
+		PlaceNode(deck.get(), lanes::ToWorld(*_lane, rackMiddle, 0.0, deckZ + kDeckBottom), MachineFacing(), false, kDeckScale);
+		PlaceNode(sweep.get(), lanes::ToWorld(*_lane, sweepX, 0.0, sweepZ + kSweepBottom), Straight(), false, kSweepScale);
 	}
 }

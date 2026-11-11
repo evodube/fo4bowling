@@ -8,6 +8,7 @@
 
 #include "Game.h"
 
+#include "Audio.h"
 #include "Settings.h"
 #include "Util.h"
 
@@ -75,6 +76,7 @@ namespace fb
 			return;
 		}
 		_inCamera = false;
+		Audio::SetListener({}, 0.0f, false);
 		HoldPlayerView();  // back exactly as you were looking before the game
 		_haveEntryView = false;
 		if (InFreeCamera()) {
@@ -297,6 +299,7 @@ namespace fb
 		Component(a_free, _yawIndex) = yaw;
 		Component(a_free, 1 - _yawIndex) = _pitchSign * pitch;
 		a_free->translation = _camPos;
+		Audio::SetListener(_camPos, yaw, true);  // (sounds are heard from the camera)
 
 		// the mouse reaches the player's own look controls too: undone every frame so the player doesn't turn
 		HoldPlayerView();

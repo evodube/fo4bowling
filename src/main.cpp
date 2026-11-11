@@ -1,3 +1,4 @@
+#include "Audio.h"
 #include "CameraHook.h"
 #include "Game.h"
 #include "Hook.h"
@@ -24,6 +25,7 @@ namespace
 			fb::Settings::Get().Load();
 			fb::Hook::Install();
 			fb::CameraHook::Install();
+			fb::Audio::Init();
 			fb::menus::Watch();
 			break;
 		case F4SE::MessagingInterface::kPreLoadGame:

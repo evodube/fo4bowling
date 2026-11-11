@@ -68,6 +68,12 @@ namespace fb
 		float returnHood{ 110.0f };   // where a returning ball comes out, inside the hood
 		float returnSpeed{ 70.0f };   // how fast it rolls down the return
 
+		// [Sound] real alley recordings, positioned where they happen
+		bool  sound{ true };
+		float soundVolume{ 0.8f };
+		float soundFullDistance{ 300.0f };  // full volume within this far of the camera...
+		float soundMaxDistance{ 3500.0f };  // ...fading to nothing here
+
 		// [HUD]
 		float hudScale{ 1.0f };
 		bool  notifications{ false };  // calls ("Strike!") as the game's own corner notifications too

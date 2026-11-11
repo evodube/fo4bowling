@@ -1,0 +1,17 @@
+The sounds in Data\Sound\fo4bowling are cut from real bowling alley recordings on Freesound, all released under
+CC0 1.0 (public domain). They were converted to mono 44.1 kHz, trimmed, faded and levelled for the mod.
+
+  crash_1, release_1, hit_*, crash_3, crash_4
+      "Bowling Ball Hits Pins, Once" and "Bowling Ball Hits Pins, Several, Distant" by CHallSmith
+      https://freesound.org/people/CHallSmith/sounds/870830/
+      https://freesound.org/people/CHallSmith/sounds/870831/
+  crash_2   "B_2 Bowling ball striking pins" by Yarmonics (Stuart Bowditch), Great Yarmouth
+      https://freesound.org/people/Yarmonics/sounds/441856/
+  return_1  "B_4 bowling ball rolling thunder" by Yarmonics (Stuart Bowditch)
+      https://freesound.org/people/Yarmonics/sounds/441862/
+  machine_1 "B_3 bowling shut down noise" by Yarmonics (Stuart Bowditch)
+      https://freesound.org/people/Yarmonics/sounds/441855/
+  roll_1, release_2   "Bowling Ball.wav" by driftworks
+      https://freesound.org/people/driftworks/sounds/128969/
+  pin_*     "bowling pins mono" by Bruce Burbank
+      https://freesound.org/people/Bruce%20Burbank/sounds/151203/

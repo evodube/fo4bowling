@@ -140,6 +140,7 @@ namespace fb
 		bool                StillHere() const;  // in the alley, alive, not in a fight
 		std::string         SplitName() const;  // "7-10 SPLIT" or empty
 		void                UpdateGuide();
+		void                PlaySounds(const std::vector<bowl::Event>& a_events);
 
 		// ------------------------------------------------ the camera (Camera.cpp)
 		void EnterCamera();
@@ -175,6 +176,8 @@ namespace fb
 		std::mt19937                             _rng{ std::random_device{}() };
 		float                                    _aimAngle{ 0.0f }; // radians, + left
 		bool                                     _lastBallGutter{ false };
+		bool                                     _rackFullAtThrow{ false };
+		double                                   _lastCrash{ -1.0 };
 		std::chrono::steady_clock::time_point    _lastTick{};
 		bool                                     _haveLastTick{ false };
 

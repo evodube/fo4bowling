@@ -25,6 +25,10 @@ The pins are real rigid bodies: they fly, tumble, roll on their sides, wobble on
 kickbacks and drop into the gutters and the pit. Ten frames with strikes, spares and the tenth frame's extra balls,
 scored on the HUD's sheet under everyone's names.
 
+The sounds are real bowling alley recordings (CC0, from Freesound; see `Data\Sound\fo4bowling\CREDITS.txt`): the
+ball landing and rolling down the lane, the crash into the rack, pins clattering, the pinsetter and the ball coming
+back up the return, each heard from where it happens.
+
 Companions bowl with their own skill and hand (the same every game): they line up the pocket for a strike and the
 key pin for a spare, and miss the way people do.
 

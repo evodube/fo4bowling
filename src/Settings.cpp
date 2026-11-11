@@ -105,6 +105,11 @@ namespace fb
 		returnHood = ReadFloat(L"Return", L"fHood", returnHood);
 		returnSpeed = std::clamp(ReadFloat(L"Return", L"fSpeed", returnSpeed), 5.0f, 1000.0f);
 
+		sound = ReadBool(L"Sound", L"bEnabled", sound);
+		soundVolume = std::clamp(ReadFloat(L"Sound", L"fVolume", soundVolume), 0.0f, 2.0f);
+		soundFullDistance = std::max(10.0f, ReadFloat(L"Sound", L"fFullDistance", soundFullDistance));
+		soundMaxDistance = std::max(soundFullDistance + 10.0f, ReadFloat(L"Sound", L"fMaxDistance", soundMaxDistance));
+
 		hudScale = std::clamp(ReadFloat(L"HUD", L"fScale", hudScale), 0.3f, 3.0f);
 		notifications = ReadBool(L"HUD", L"bNotifications", notifications);
 

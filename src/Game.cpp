@@ -8,6 +8,7 @@
 
 #include "Game.h"
 
+#include "Audio.h"
 #include "Hud.h"
 #include "Settings.h"
 #include "Util.h"
@@ -117,12 +118,9 @@ namespace fb
 					break;
 				case Phase::kRolling:
 					_sim->Advance(dt);
-					for (const auto& e : _sim->TakeEvents()) {
-						if (e.kind == bowl::Event::Kind::kBallGutter) {
-							_lastBallGutter = true;
-						}
-					}
+					PlaySounds(_sim->TakeEvents());
 					if (_sim->Settled()) {
+						Audio::StopRoll();
 						BallSettled();
 					}
 					break;
@@ -522,6 +520,7 @@ namespace fb
 			remove(b.ref);
 		}
 		RestoreVanilla();
+		Audio::StopRoll();
 		_charging = false;
 		BlockControls(false);
 		LeaveCamera();
@@ -585,7 +584,10 @@ namespace fb
 			me.aim = _aimAngle;
 		}
 		_aiPlanned = false;
+		_rackFullAtThrow = _sim->StandingCount() >= 6;
+		_lastCrash = -1.0;
 		_sim->Throw(r);
+		Audio::Play(Audio::Bank::kRelease, HeldPoint(), 0.35f + 0.65f * power);
 		_balls[static_cast<std::size_t>(_active)].at = BallAt::kLane;
 		_lastBallGutter = false;
 		_phase = Phase::kRolling;
@@ -658,6 +660,7 @@ namespace fb
 		} else {
 			_sim->Sweep();
 		}
+		Audio::Play(Audio::Bank::kMachine, lanes::ToWorld(*_lane, _sim->GetSpec().headPin + 40.0, 0.0, 30.0), 0.8f);
 		// the ball at the front of the return is the one picked up; the other rolls up behind it
 		int pick = -1;
 		for (int b = 0; b < 2; ++b) {
@@ -783,6 +786,57 @@ namespace fb
 			}
 		}
 		_modes = std::move(modes);
+	}
+
+	void Game::PlaySounds(const std::vector<bowl::Event>& a_events)
+	{
+		// what the physics did this tick, as sounds where it happened
+		const auto& b = _sim->GetBall();
+		const bool  rolling = b.state == bowl::BallState::kLane || b.state == bowl::BallState::kGutter;
+		if (rolling) {
+			const float speed = static_cast<float>(b.vel.Length());
+			const float k = std::clamp(speed / 800.0f, 0.0f, 1.0f);
+			const bool  gutter = b.state == bowl::BallState::kGutter;
+			Audio::Roll(lanes::ToWorld(*_lane, b.pos.x, b.pos.y, b.z), (0.25f + 0.75f * k) * (gutter ? 0.7f : 1.0f), (0.8f + 0.35f * k) * (gutter ? 0.85f : 1.0f));
+		} else {
+			Audio::StopRoll();
+		}
+		int pins = 0;  // (a few clatters a tick is plenty)
+		for (const auto& e : a_events) {
+			const auto  at = lanes::ToWorld(*_lane, e.pos.x, e.pos.y, 12.0);
+			const float hard = static_cast<float>(e.strength);
+			switch (e.kind) {
+			case bowl::Event::Kind::kBallGutter:
+				_lastBallGutter = true;
+				break;
+			case bowl::Event::Kind::kBallPin:
+				// the ball into the rack: the big crash for a full-ish rack hit hard, a lighter hit otherwise
+				if (_sim->TimeSinceThrow() - _lastCrash > 0.35) {
+					_lastCrash = _sim->TimeSinceThrow();
+					if (_rackFullAtThrow && hard > 250.0f) {
+						Audio::Play(Audio::Bank::kCrash, at, 0.5f + hard / 1200.0f);
+					} else {
+						Audio::Play(Audio::Bank::kHit, at, 0.35f + hard / 1200.0f);
+					}
+				}
+				break;
+			case bowl::Event::Kind::kPinPin:
+			case bowl::Event::Kind::kPinDeck:
+			case bowl::Event::Kind::kPinWall:
+				if (hard > 60.0f && pins < 4) {
+					++pins;
+					const float pitch = e.kind == bowl::Event::Kind::kPinPin ? 1.0f : e.kind == bowl::Event::Kind::kPinDeck ? 0.8f : 0.7f;
+					Audio::Play(Audio::Bank::kPin, at, std::min(0.9f, hard / 700.0f), pitch);
+				}
+				break;
+			case bowl::Event::Kind::kPinPit:
+				Audio::Play(Audio::Bank::kPin, at, 0.25f, 0.6f);
+				break;
+			case bowl::Event::Kind::kBallPit:
+				Audio::Play(Audio::Bank::kPin, at, 0.45f, 0.45f);  // (a dull thump into the back of the machine)
+				break;
+			}
+		}
 	}
 
 	void Game::UpdateGuide()
@@ -1094,6 +1148,7 @@ namespace fb
 					ball.target = frontTaken ? s.returnSpot2 : s.returnSpot1;
 					ball.pos = ReturnPoint(ball.along, s.returnZ);
 					hidden = false;
+					Audio::Play(Audio::Bank::kReturn, ball.pos, 0.7f);
 				}
 				break;
 			}

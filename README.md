@@ -4,20 +4,29 @@ Playable bowling for Fallout 4, at Back Alley Bowling in the General Atomics Gal
 nothing in the cell is edited (its precombines and previs stay as they are).
 
 Lanes 3 and 6 are the two without wreckage on them. Walk up to either one's ball return, look at it and press the
-activate key (F). Left and right there pick 1 to 4 players, taking turns at one keyboard.
+activate key (F). The left and right arrows there pick who plays: solo, you against a companion who's with you (or
+all of them), or 2 to 4 players taking turns at one keyboard.
 
 ## Playing
 
-- **Aim** with the mouse: the camera sits behind the ball at the foul line and turns a few degrees either way.
-- **Left / Right arrows** move you along the foul line (the HUD shows which board you're on).
-- **Up / Down arrows** set the hook: Up hooks left (a right-hander's hook), Down hooks right.
-- **Hold the left mouse button and pull the mouse back** for power; let go to throw. Letting go at 0% cancels.
+- **Aim** by moving the mouse sideways. The camera stays still behind the ball; a green line shows your aim.
+- **A / D** move you along the foul line (the HUD shows which board you're on).
+- **W / S** set the spin: W hooks left (a right-hander's hook), S hooks right.
+- **Hold the left mouse button**, pull the mouse back for power and move it sideways for extra spin, then let go.
+  Letting go at 0% cancels.
 - **X twice** stops the game.
 
 The ball skids through the oil on the front of the lane and hooks once it reaches the dry back end, so a hook ball
-wants to start out wide and come back into the pocket (the 1-3 for a right-hander, the 1-2 for a left-hander).
-Pins fall the way they do in a real alley: they knock each other down, bounce off the kickbacks and slide into the
-gutters. Ten frames with strikes, spares and the tenth frame's extra balls, scored on the HUD's sheet.
+wants to start out wide and come back into the pocket (the 1-3 for a right-hander, the 1-2 for a left-hander). No
+two balls are quite the same: every throw strays a little from what you set up (more when you throw it hard), the
+lane drifts each ball a touch left or right, and the pinsetter never spots the pins exactly.
+
+The pins are real rigid bodies: they fly, tumble, roll on their sides, wobble on their bases, bounce off the
+kickbacks and drop into the gutters and the pit. Ten frames with strikes, spares and the tenth frame's extra balls,
+scored on the HUD's sheet under everyone's names.
+
+Companions bowl with their own skill and hand (the same every game): they line up the pocket for a strike and the
+key pin for a spare, and miss the way people do.
 
 You need [F4SE](https://f4se.silverlock.org/) and the Address Library. The HUD (score sheet, meters, calls) needs
 F4SE Menu Framework; without it the game still plays and the calls come up as the game's own notifications.
@@ -27,10 +36,13 @@ Settings are in `Data\F4SE\Plugins\fo4bowling.ini`, re-read at the start of ever
 ## How it works
 
 - `src/sim/Sim` is the physics, plain C++: the ball is a solid sphere with sliding and rolling friction on an oiled
-  lane; the pins rock about the rim of their base, tip past it, and fall as capsules that knock into each other.
+  lane; the pins are rigid bodies (spheres along their axis, a ring for the foot) solved with impulses, friction and
+  restitution against the ball, each other, the deck and its edges, the gutters, kickbacks and pit.
   `tests/sim_test.cpp` checks it (straight balls go straight, hooks hook after the oil, gutter balls touch nothing,
   pocket hits strike often but not always, left and right hands play alike).
 - `src/sim/Score` is ten-pin scoring and turn order, tested in `tests/score_test.cpp`.
+- `src/sim/Ai` picks a companion's throw: it works out the ball's path ahead with the same physics and finds the
+  line to the pocket or the key pin. Tested in `tests/ai_test.cpp`.
 - `src/Lanes.h` has the two lanes as they are in Fallout4.esm: lane 3's middle at y 1024 and lane 6's at 1792, the
   foul line at x -1664, the head pin 1064 down the lane, the ball returns 0015BDB0 and 0015BDB2.
 - `src/Game.cpp` runs a game: it hides the lane's own pins and the balls on its return, places vanilla BowlingPin01
@@ -47,6 +59,7 @@ CommonLibF4 (submodule), targeting Fallout 4 1.10.163. Locally:
 ```
 g++ -std=c++20 -O2 -Isrc tests/sim_test.cpp src/sim/Sim.cpp -o sim_test && ./sim_test
 g++ -std=c++20 -O2 -Isrc tests/score_test.cpp src/sim/Score.cpp -o score_test && ./score_test
+g++ -std=c++20 -O2 -Isrc tests/ai_test.cpp src/sim/Ai.cpp src/sim/Sim.cpp -o ai_test && ./ai_test
 xmake f -m releasedbg -y && xmake build -y fo4bowling
 ```
 

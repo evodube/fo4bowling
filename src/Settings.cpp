@@ -124,7 +124,8 @@ namespace fb
 		s.pinSpacing = std::max(5.0, ReadDouble(L"Physics", L"fPinSpacing", s.pinSpacing));
 		s.pinRestitution = ReadDouble(L"Physics", L"fPinRestitution", s.pinRestitution);
 		s.pinPinRestitution = ReadDouble(L"Physics", L"fPinPinRestitution", s.pinPinRestitution);
-		s.pinSlideFriction = ReadDouble(L"Physics", L"fPinSlideFriction", s.pinSlideFriction);
+		s.pinDeckFriction = ReadDouble(L"Physics", L"fPinDeckFriction", s.pinDeckFriction);
+		s.pinFriction = ReadDouble(L"Physics", L"fPinFriction", s.pinFriction);
 		pinJitter = std::clamp(ReadFloat(L"Physics", L"fPinJitter", pinJitter), 0.0f, 5.0f);
 
 		log::info("settings: throw {:.0f}-{:.0f}, revs {:.0f}, hook up to {:.0f} deg, inaccuracy {:.2f} | lane offset ({:.1f}, {:.1f}, {:.1f}) | head pin {:.0f}, oil {:.0f}",

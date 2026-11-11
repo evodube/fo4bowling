@@ -198,7 +198,7 @@ namespace fb
 		}
 		// the camera's ours all game: the mouse never turns it. While aiming, sideways movement is the aim; with the
 		// button held, pulling back is power
-		const bool aiming = _phase == Phase::kAiming || _phase == Phase::kPickup;
+		const bool aiming = (_phase == Phase::kAiming || _phase == Phase::kPickup) && !AiTurn();  // (a companion's line is theirs)
 		// (the same event can reach both handlers; count it once)
 		const bool repeat = a_event == _lastMouseEvent && a_event->timeCode == _lastMouseTime;
 		_lastMouseEvent = a_event;

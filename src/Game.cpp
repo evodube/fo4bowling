@@ -22,6 +22,7 @@ namespace fb
 		constexpr float  kOverSeconds = 3.0f;      // the final scores, then the game packs itself away
 		constexpr float  kReturnDelay = 1.6f;      // a thrown ball spends this long in the machine before it comes back
 		constexpr float  kQuitWindow = 3.0f;       // the quit key twice within this many seconds stops the game
+		constexpr float  kAiAimSeconds = 1.6f;     // a companion lines up their throw this long
 		constexpr double kPi = 3.14159265358979323846;
 
 		RE::TESBoundObject* Base(RE::TESFormID a_id)
@@ -102,6 +103,16 @@ namespace fb
 					if (_phaseTime >= kPickupSeconds) {
 						_phase = Phase::kAiming;
 						_phaseTime = 0.0f;
+					}
+					break;
+				case Phase::kAiming:
+					if (AiTurn()) {
+						// a companion's turn: they line it up (the guide shows it), take a moment, and throw
+						if (!_aiPlanned) {
+							PlanAiThrow();
+						} else if (_phaseTime >= kAiAimSeconds) {
+							Throw(static_cast<float>(_aiPlan.power), true);
+						}
 					}
 					break;
 				case Phase::kRolling:
@@ -185,9 +196,14 @@ namespace fb
 			h.bannerAlpha = _bannerLength > 0.0f ? std::clamp(std::min(_bannerTime, _bannerLength - _bannerTime) * 4.0f, 0.0f, 1.0f) : 0.0f;
 			h.over = _phase == Phase::kOver;
 			h.guide = _guide;
-			h.keys = std::format("MOUSE: AIM   {}/{}: MOVE   {}/{}: SPIN   HOLD LEFT MOUSE: PULL BACK FOR POWER, SIDEWAYS FOR SPIN   {} TWICE: QUIT",
+			if (AiTurn()) {
+				h.keys = std::format("{} IS BOWLING   {} TWICE: QUIT", _names[static_cast<std::size_t>(_match.Bowler())], util::Upper(Settings::Key(s.keyQuit)));
+			} else
+			{
+				h.keys = std::format("MOUSE: AIM   {}/{}: MOVE   {}/{}: SPIN   HOLD LEFT MOUSE: PULL BACK FOR POWER, SIDEWAYS FOR SPIN   {} TWICE: QUIT",
 				util::Upper(Settings::Key(s.keyLeft)), util::Upper(Settings::Key(s.keyRight)), util::Upper(Settings::Key(s.keyHookLeft)),
 				util::Upper(Settings::Key(s.keyHookRight)), util::Upper(Settings::Key(s.keyQuit)));
+			}
 		}
 		std::scoped_lock lock(_hudMutex);
 		_hud = std::move(h);
@@ -214,14 +230,16 @@ namespace fb
 		_lmbWasDown = lmb;
 
 		if (_phase == Phase::kNone) {
-			// at a ball return: the arrows pick how many play, F starts
-			if (_lookLane) {
+			// at a ball return: the arrows pick who plays (more players, or your companions), F starts
+			if (_lookLane && !_modes.empty()) {
 				if (pressed[5] || pressed[6]) {
-					_players = std::clamp(_players + (pressed[6] ? 1 : -1), 1, 4);
+					const int n = static_cast<int>(_modes.size());
+					_mode = ((_mode + (pressed[6] ? 1 : -1)) % n + n) % n;
+					_modeLabel = _modes[static_cast<std::size_t>(_mode)].label;
 					_lookTime = {};  // (the prompt shows it at once)
 				}
 				if (activatePressed) {
-					StartGame(*_lookLane, _players);
+					StartGame(*_lookLane, _modes[static_cast<std::size_t>(std::clamp(_mode, 0, static_cast<int>(_modes.size()) - 1))]);
 				}
 			}
 			return;
@@ -239,7 +257,7 @@ namespace fb
 			Say(std::format("Bowling: press {} again to stop the game", Settings::Key(s.keyQuit)));
 		}
 
-		if (_phase != Phase::kAiming && _phase != Phase::kPickup) {
+		if ((_phase != Phase::kAiming && _phase != Phase::kPickup) || AiTurn()) {
 			_charging = false;
 			return;
 		}
@@ -273,7 +291,7 @@ namespace fb
 				if (_power.load() < 0.02f) {
 					Say("Bowling: pull the mouse back while you hold the button to put power on it");
 				} else {
-					Throw();
+					Throw(_power.load(), false);
 				}
 			}
 		}
@@ -296,6 +314,9 @@ namespace fb
 		}
 		const auto* was = _lookLane;
 		_lookLane = util::GamePaused() ? nullptr : LookedAtLane();
+		if (_lookLane) {
+			BuildModes();
+		}
 		if (_lookLane && _lookLane != was && !Hud::Installed()) {
 			// (no Menu Framework: the game's own notification says what F does here)
 			Say(std::format("Bowling: {} at the ball return starts a game on lane {}", Settings::Key(_activateVk), _lookLane->number));
@@ -305,7 +326,8 @@ namespace fb
 		std::scoped_lock lock(_hudMutex);
 		if (_lookLane) {
 			_hud.prompt = std::format("{}) START BOWLING", util::Upper(Settings::Key(_activateVk)));
-			_hud.promptSub = std::format("<  {} PLAYER{}  >     LANE {}", _players, _players == 1 ? "" : "S", _lookLane->number);
+			const auto& mode = _modes.empty() ? std::string("SOLO") : _modes[static_cast<std::size_t>(_mode)].label;
+			_hud.promptSub = std::format("<  {}  >     LANE {}", mode, _lookLane->number);
 		} else {
 			_hud.prompt.clear();
 			_hud.promptSub.clear();
@@ -390,7 +412,7 @@ namespace fb
 
 	// ---------------------------------------------------------------- a game
 
-	void Game::StartGame(const lanes::Lane& a_lane, int a_players)
+	void Game::StartGame(const lanes::Lane& a_lane, const Mode& a_mode)
 	{
 		auto* player = RE::PlayerCharacter::GetSingleton();
 		auto* pinBase = Base(lanes::kPinBase);
@@ -413,15 +435,40 @@ namespace fb
 			_hud.promptSub.clear();
 		}
 
+		// who's bowling: you (by name) and anyone sharing your keyboard, then the companions you're playing
+		_bowlers.clear();
+		const std::string you = PlayerName();
+		for (int p = 0; p < std::max(1, a_mode.humans); ++p) {
+			Bowler b;
+			b.name = p == 0 ? you : std::format("PLAYER {}", p + 1);
+			_bowlers.push_back(b);
+		}
+		for (const auto& h : a_mode.npcs) {
+			auto  ref = h.get();
+			auto* actor = ref ? ref->As<RE::Actor>() : nullptr;
+			if (!actor || _bowlers.size() >= 4) {
+				continue;
+			}
+			// each companion bowls their own way, the same every game: how good, and which hand
+			const std::uint32_t seed = actor->GetFormID() * 2654435761u;
+			Bowler b;
+			b.name = NameOf(actor);
+			b.ai = true;
+			b.skill = 0.35f + static_cast<float>((seed >> 8) % 45) / 100.0f;
+			b.leftHanded = (seed >> 20) % 8 == 0;
+			b.actor = h;
+			_bowlers.push_back(b);
+			log::info("{} ({:08X}) bowls: skill {:.2f}, {}-handed", b.name, actor->GetFormID(), b.skill, b.leftHanded ? "left" : "right");
+		}
+		const int players = static_cast<int>(_bowlers.size());
+		_names.clear();
+		for (const auto& b : _bowlers) {
+			_names.push_back(b.name);
+		}
 		_sim = std::make_unique<bowl::Sim>(s.spec);
 		_sim->Rack(s.pinJitter, _rng());
-		_match = bowl::Match(a_players);
-		_names.clear();
-		const char* own = player->GetDisplayFullName();
-		const std::string you = own && *own ? util::Upper(own) : std::string("YOU");
-		for (int p = 0; p < a_players; ++p) {
-			_names.push_back(a_players == 1 ? you : p == 0 ? you : std::format("PLAYER {}", p + 1));
-		}
+		_match = bowl::Match(players);
+		_aiPlanned = false;
 
 		// the lane's own pins (and any balls on its return) out of the way; ours in their place
 		HideVanilla(a_lane);
@@ -452,8 +499,8 @@ namespace fb
 		_balls[1].target = s.returnSpot1;  // the other one rolls up behind it
 		EnterCamera();
 		BlockControls(true);
-		Banner(std::format("LANE {}", a_lane.number), a_players == 1 ? std::string("FRAME 1") : std::format("{} PLAYERS · FRAME 1", a_players), 2.0f);
-		log::info("game on lane {} for {} player(s)", a_lane.number, a_players);
+		Banner(std::format("LANE {}", a_lane.number), players == 1 ? std::string("FRAME 1") : a_mode.label + "  ·  FRAME 1", 2.0f);
+		log::info("game on lane {}: {}", a_lane.number, a_mode.label);
 	}
 
 	void Game::EndGame(const std::string& a_why)
@@ -491,25 +538,31 @@ namespace fb
 		log::info("game over");
 	}
 
-	void Game::Throw()
+	void Game::Throw(float a_power, bool a_ai)
 	{
 		if (_phase != Phase::kAiming || !_sim) {
 			return;
 		}
 		const auto&   s = Settings::Get();
-		const float   power = std::clamp(_power.load(), 0.0f, 1.0f);
+		const float   power = std::clamp(a_power, 0.0f, 1.0f);
 		bowl::Release r;
-		r.y = _releaseY;
-		r.angle = _aimAngle;
-		r.speed = s.minSpeed + (s.maxSpeed - s.minSpeed) * std::pow(power, 1.3f);
-		r.revs = s.revs;
-		const float hook = HookNow();
-		r.axis = hook / 100.0 * s.maxHook * kPi / 180.0;
+		float         hook = HookNow();
+		if (a_ai) {
+			r = _aiPlan.release;  // (their own pace and spin, worked out for the line)
+			hook = s.maxHook > 0.0f ? static_cast<float>(r.axis * 180.0 / kPi / s.maxHook * 100.0) : 0.0f;
+		} else {
+			r.y = _releaseY;
+			r.angle = _aimAngle;
+			r.speed = s.minSpeed + (s.maxSpeed - s.minSpeed) * std::pow(power, 1.3f);
+			r.revs = s.revs;
+			r.axis = hook / 100.0 * s.maxHook * kPi / 180.0;
+		}
 		// nobody throws exactly what they meant to: a little off in line, pace, spin and where it leaves the hand,
-		// and more of it the harder the throw
+		// and more of it the harder the throw (and a companion's misses depend on how good they are)
 		if (s.inaccuracy > 0.0f) {
 			std::normal_distribution<double> n(0.0, 1.0);
-			const double k = s.inaccuracy * (0.5 + power);
+			const float  skill = a_ai ? _bowlers[static_cast<std::size_t>(_match.Bowler())].skill : 0.5f;
+			const double k = s.inaccuracy * (0.5 + power) * (a_ai ? (1.75 - 1.5 * skill) : 1.0);
 			r.angle += n(_rng) * 0.08 * kPi / 180.0 * k;
 			r.speed *= 1.0 + n(_rng) * 0.008 * k;
 			r.revs *= 1.0 + n(_rng) * 0.03 * k;
@@ -524,15 +577,23 @@ namespace fb
 			r.driftWave = n(_rng) * 12.0 * s.laneDrift;
 			r.driftPhase = phase(_rng);
 		}
-		_lastPower = power;
+		if (!a_ai) {
+			_lastPower = power;
+			auto& me = _bowlers[static_cast<std::size_t>(_match.Bowler())];
+			me.releaseY = _releaseY;
+			me.hook = _hook;
+			me.aim = _aimAngle;
+		}
+		_aiPlanned = false;
 		_sim->Throw(r);
 		_balls[static_cast<std::size_t>(_active)].at = BallAt::kLane;
 		_lastBallGutter = false;
 		_phase = Phase::kRolling;
 		_phaseTime = 0.0f;
 		_quitArmed = false;
-		log::info("throw: board {} angle {:.2f} deg, power {:.0f}% = {:.0f} u/s, hook {:.0f}% (axis {:.1f} deg, {:.0f} rad/s)", _hud.board,
-			r.angle * 180.0 / kPi, power * 100.0f, r.speed, hook, r.axis * 180.0 / kPi, r.revs);
+		log::info("throw ({}): from {:.1f} angle {:.2f} deg, power {:.0f}% = {:.0f} u/s, hook {:.0f}% (axis {:.1f} deg, {:.0f} rad/s), drift {:.1f}/{:.1f}",
+			_names[static_cast<std::size_t>(_match.Bowler())], r.y, r.angle * 180.0 / kPi, power * 100.0f, r.speed, hook, r.axis * 180.0 / kPi, r.revs,
+			r.drift, r.driftWave);
 		_swingHook = 0.0f;
 	}
 
@@ -609,6 +670,13 @@ namespace fb
 			pick = 1 - _active;  // (both somehow away: take the other one out of the machine)
 		}
 		_active = pick;
+		// whoever's up: a player gets back their own spot, line and spin
+		if (const auto& up = _bowlers[static_cast<std::size_t>(_match.Bowler())]; !up.ai) {
+			_releaseY = up.releaseY;
+			_hook = up.hook;
+			_aimAngle = up.aim;
+		}
+		_aiPlanned = false;
 		auto& ball = _balls[static_cast<std::size_t>(_active)];
 		ball.at = BallAt::kHand;
 		auto& other = _balls[static_cast<std::size_t>(1 - _active)];
@@ -621,6 +689,100 @@ namespace fb
 			const std::string who = _names.size() > 1 ? _names[static_cast<std::size_t>(_match.Bowler())] + "  ·  " : std::string();
 			Banner(std::format("FRAME {}", card.Frame() + 1), who + std::format("{}", card.Total()), 1.4f);
 		}
+	}
+
+	bool Game::AiTurn() const
+	{
+		const int b = _match.Bowler();
+		return _phase != Phase::kNone && b >= 0 && b < static_cast<int>(_bowlers.size()) && _bowlers[static_cast<std::size_t>(b)].ai;
+	}
+
+	void Game::PlanAiThrow()
+	{
+		const auto&      s = Settings::Get();
+		const auto&      who = _bowlers[static_cast<std::size_t>(_match.Bowler())];
+		bowl::ThrowLimits limits;
+		limits.minSpeed = s.minSpeed;
+		limits.maxSpeed = s.maxSpeed;
+		limits.revs = s.revs;
+		limits.maxAxis = s.maxHook * kPi / 180.0;
+		limits.maxAngle = s.maxAim * kPi / 180.0;
+		_aiPlan = bowl::PlanThrow(_sim->GetSpec(), _sim->Pins(), who.skill, who.leftHanded, limits);
+		_aiPlanned = true;
+		_phaseTime = 0.0f;
+		// shown on the lane like your own: where they stand, their line, their spin
+		_releaseY = _aiPlan.release.y;
+		_aimAngle = static_cast<float>(_aiPlan.release.angle);
+		_hook = s.maxHook > 0.0f ? static_cast<float>(_aiPlan.release.axis * 180.0 / kPi / s.maxHook * 100.0) : 0.0f;
+		_swingHook = 0.0f;
+		log::info("{} lines up: from {:.1f} at ({:.0f}, {:.1f}), power {:.0f}%", who.name, _aiPlan.release.y, _aiPlan.target.x, _aiPlan.target.y,
+			_aiPlan.power * 100.0);
+	}
+
+	std::string Game::PlayerName()
+	{
+		auto*       player = RE::PlayerCharacter::GetSingleton();
+		const char* own = player ? player->GetDisplayFullName() : nullptr;
+		return own && *own ? util::Upper(own) : std::string("PLAYER 1");
+	}
+
+	std::string Game::NameOf(RE::Actor* a_actor)
+	{
+		const char* name = a_actor ? a_actor->GetDisplayFullName() : nullptr;
+		std::string n = name && *name ? util::Upper(name) : std::string("COMPANION");
+		if (n.size() > 14) {
+			n = n.substr(0, 13) + ".";
+		}
+		return n;
+	}
+
+	void Game::BuildModes()
+	{
+		// you alone or with friends at the keyboard, then you against each companion nearby, then all of them
+		static auto* companionFaction = RE::TESForm::GetFormByID<RE::TESFaction>(0x00023C01);  // CurrentCompanionFaction
+		static auto* npcType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x00013794);           // ActorTypeNPC
+		static auto* robotType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x0002CB73);         // ActorTypeRobot
+		auto*        player = RE::PlayerCharacter::GetSingleton();
+		auto*        cell = player ? player->GetParentCell() : nullptr;
+		std::vector<RE::Actor*> companions;
+		if (cell && companionFaction) {
+			cell->ForEachReferenceInRange(player->data.location, 1500.0f, [&](RE::TESObjectREFR* a_ref) {
+				auto* actor = a_ref && a_ref != player ? a_ref->As<RE::Actor>() : nullptr;
+				if (!actor || actor->IsDisabled() || actor->IsDead(false) || !actor->IsInFaction(companionFaction)) {
+					return RE::BSContainer::ForEachResult::kContinue;
+				}
+				// people and robots bowl; a dog doesn't
+				const bool person = (npcType && actor->HasKeywordHelper(npcType, nullptr)) || (robotType && actor->HasKeywordHelper(robotType, nullptr));
+				if (person && companions.size() < 3) {
+					companions.push_back(actor);
+				}
+				return RE::BSContainer::ForEachResult::kContinue;
+			});
+		}
+		const std::string you = PlayerName();
+		std::vector<Mode> modes;
+		modes.push_back({ "SOLO", 1, {} });
+		for (auto* c : companions) {
+			modes.push_back({ std::format("{} VS {}", you, NameOf(c)), 1, { c->GetHandle() } });
+		}
+		if (companions.size() >= 2) {
+			Mode all{ std::format("{} VS EVERYONE", you), 1, {} };
+			for (auto* c : companions) {
+				all.npcs.push_back(c->GetHandle());
+			}
+			modes.push_back(all);
+		}
+		for (int n = 2; n <= 4; ++n) {
+			modes.push_back({ std::format("{} PLAYERS", n), n, {} });
+		}
+		// (stay on the same choice as companions come and go)
+		_mode = 0;
+		for (std::size_t i = 0; i < modes.size(); ++i) {
+			if (modes[i].label == _modeLabel) {
+				_mode = static_cast<int>(i);
+			}
+		}
+		_modes = std::move(modes);
 	}
 
 	void Game::UpdateGuide()

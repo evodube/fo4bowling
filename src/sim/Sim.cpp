@@ -198,6 +198,27 @@ namespace bowl
 		_events.clear();
 	}
 
+	void Sim::KeepOnly(std::uint32_t a_mask)
+	{
+		for (int i = 0; i < kPins; ++i) {
+			if (!(a_mask & (1u << i))) {
+				auto& p = _pins[static_cast<std::size_t>(i)];
+				p.state = PinState::kSwept;
+				p.frozen = true;
+				p.asleep = true;
+			}
+		}
+	}
+
+	void Sim::ClearPins()
+	{
+		for (auto& p : _pins) {
+			p.state = PinState::kSwept;
+			p.frozen = true;
+			p.asleep = true;
+		}
+	}
+
 	// ---------------------------------------------------------------- the ball
 
 	void Sim::Hold(double a_y)

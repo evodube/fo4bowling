@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Lanes.h"
+#include "sim/Ai.h"
 #include "sim/Score.h"
 #include "sim/Sim.h"
 
@@ -94,9 +95,33 @@ namespace fb
 		void UpdateLook();
 		const lanes::Lane* LookedAtLane() const;
 
-		void StartGame(const lanes::Lane& a_lane, int a_players);
+		// who's playing: you (and friends at one keyboard), or you against companions
+		struct Mode
+		{
+			std::string                      label;   // "2 PLAYERS", "NATE VS CAIT"
+			int                              humans{ 1 };
+			std::vector<RE::ObjectRefHandle> npcs;
+		};
+		struct Bowler
+		{
+			std::string         name;
+			bool                ai{ false };
+			float               skill{ 0.6f };
+			bool                leftHanded{ false };
+			RE::ObjectRefHandle actor;
+			double              releaseY{ 0.0 };  // (a player's own set-up, kept between their turns)
+			float               hook{ 0.0f };
+			float               aim{ 0.0f };
+		};
+		void              BuildModes();
+		static std::string PlayerName();
+		static std::string NameOf(RE::Actor* a_actor);
+
+		void StartGame(const lanes::Lane& a_lane, const Mode& a_mode);
+		void PlanAiThrow();
+		bool AiTurn() const;
 		void EndGame(const std::string& a_why);
-		void Throw();
+		void Throw(float a_power, bool a_ai);
 		void BallSettled();
 		void NextBall();
 		void Banner(const std::string& a_title, const std::string& a_sub, float a_seconds);
@@ -131,6 +156,11 @@ namespace fb
 		std::unique_ptr<bowl::Sim>               _sim;
 		bowl::Match                              _match{ 1 };
 		std::vector<std::string>                 _names;
+		std::vector<Bowler>                      _bowlers;
+		std::vector<Mode>                        _modes;
+		int                                      _mode{ 0 };
+		bool                                     _aiPlanned{ false };
+		bowl::AiThrow                            _aiPlan;
 		std::array<RE::ObjectRefHandle, 10>      _pins{};
 		std::array<bool, 10>                     _pinPrepared{};
 		std::array<BallSlot, 2>                  _balls{};
@@ -150,7 +180,7 @@ namespace fb
 
 		// input
 		std::atomic<bool>                        _tickPending{ false };
-		int                                      _players{ 1 };     // picked at the ball return
+		std::string                              _modeLabel;        // (the picked mode, kept as the list changes)
 		const lanes::Lane*                       _lookLane{ nullptr };
 		std::chrono::steady_clock::time_point    _lookTime{};
 		int                                      _activateVk{ 0x46 };  // F, until the control map says otherwise

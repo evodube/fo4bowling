@@ -205,6 +205,10 @@ namespace bowl
 		void Rack(double a_jitter = 0.0, std::uint32_t a_seed = 0);
 		// the pins that are down are taken away, the standing ones stand up straight where they are
 		void Sweep();
+		// no pins at all (for working out a ball's path on its own)
+		void ClearPins();
+		// only the pins in a_mask left standing (bit n = pin n), the rest swept away
+		void KeepOnly(std::uint32_t a_mask);
 		// where pin n (0 = the head pin, 1..9 the 2- to 10-pin) stands in a full rack
 		Vec2 Spot(int a_pin) const;
 

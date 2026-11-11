@@ -19,6 +19,7 @@
 #include "F4SEMenuFramework.h"
 #include "Game.h"
 #include "HudGlyphs.h"
+#include "MenuWatch.h"
 #include "Settings.h"
 
 namespace fb::Hud
@@ -920,6 +921,11 @@ namespace fb::Hud
 		{
 			auto* viewport = GetMainViewport();
 			if (!viewport) {
+				return;
+			}
+			// nothing over the pause menu, the Pip-Boy, a loading screen or a fade (the prompt's last state would otherwise
+			// hang on through a fast travel: the game doesn't tick while it loads)
+			if (menus::AnyBlocking() || menus::Open(menus::kFader)) {
 				return;
 			}
 			const auto st = Game::Get().Hud();

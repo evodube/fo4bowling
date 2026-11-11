@@ -5,7 +5,7 @@ namespace fb::menus
 	namespace
 	{
 		constexpr std::array<std::string_view, kCount> kNames{ "PauseMenu", "PipboyMenu", "LoadingMenu", "MainMenu", "Console",
-			"WorkshopMenu", "DialogueMenu" };
+			"WorkshopMenu", "DialogueMenu", "FaderMenu" };
 
 		std::array<std::atomic<bool>, kCount> g_open{};
 

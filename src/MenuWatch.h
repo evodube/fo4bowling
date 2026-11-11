@@ -17,6 +17,7 @@ namespace fb::menus
 		kConsole,
 		kWorkshop,
 		kDialogue,
+		kFader,  // the fade to and from black around a fast travel, a load or a sleep
 		kCount
 	};
 

@@ -1,6 +1,7 @@
 #include "sim/Sim.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 
 namespace bowl
@@ -8,47 +9,73 @@ namespace bowl
 	namespace
 	{
 		constexpr double kPi = 3.14159265358979323846;
-		constexpr double kHalfPi = kPi * 0.5;
 		constexpr double kSqrt3 = 1.7320508075688772;
-		constexpr double kSettleSeconds = 0.6;   // nothing moving this long: settled
+		constexpr double kSettleSeconds = 0.4;   // every pin asleep this long: settled
 		constexpr double kGiveUpSeconds = 12.0;  // a throw never takes longer than this
-		constexpr double kSlideShare = 1.0;      // how much of a knock goes into moving the pin along
-		constexpr double kTipShare = 0.3;        // ...and how much of its turn about the base goes into tipping it over
-		                                         // (a pin's struck near its middle: it mostly flies, and topples as it goes)
-		constexpr double kFlyingSpeed = 200.0;   // a pin this fast clears a gutter (and can bounce off a kickback)
-		constexpr double kBellyHeight = 10.5;    // where a ball meets a standing pin
+		constexpr int    kIterations = 10;       // impulse solver passes per step
+		constexpr double kSlop = 0.05;           // overlap allowed before it's pushed apart
+		constexpr double kPush = 0.25;           // how much of the overlap is pushed out per step
+		constexpr double kMaxPush = 60.0;        // ...but never faster than this (no launching pins out of a deep overlap)
+		constexpr double kBounceFrom = 25.0;     // impacts slower than this don't bounce (resting contact)
+		constexpr double kSleepSpeed = 4.0;      // a pin this slow...
+		constexpr double kSleepSpin = 0.6;       // ...turning this slowly...
+		constexpr double kSleepAfter = 0.3;      // ...for this long goes to sleep
+		constexpr double kUprightCos = 0.866;    // within 30 degrees of upright counts as standing
+	}
 
-		double Clamp01(double a_v) { return std::clamp(a_v, 0.0, 1.0); }
+	// ---------------------------------------------------------------- vectors
 
-		// closest points between segments p0-p1 and q0-q1: the fractions along each
-		void ClosestOnSegments(const Vec3& a_p0, const Vec3& a_p1, const Vec3& a_q0, const Vec3& a_q1, double& a_s, double& a_t)
-		{
-			const Vec3   d1{ a_p1.x - a_p0.x, a_p1.y - a_p0.y, a_p1.z - a_p0.z };
-			const Vec3   d2{ a_q1.x - a_q0.x, a_q1.y - a_q0.y, a_q1.z - a_q0.z };
-			const Vec3   r{ a_p0.x - a_q0.x, a_p0.y - a_q0.y, a_p0.z - a_q0.z };
-			const double a = d1.x * d1.x + d1.y * d1.y + d1.z * d1.z;
-			const double e = d2.x * d2.x + d2.y * d2.y + d2.z * d2.z;
-			const double f = d2.x * r.x + d2.y * r.y + d2.z * r.z;
-			const double c = d1.x * r.x + d1.y * r.y + d1.z * r.z;
-			const double b = d1.x * d2.x + d1.y * d2.y + d1.z * d2.z;
-			const double denom = a * e - b * b;
-			double       s = denom > 1e-9 ? Clamp01((b * f - c * e) / denom) : 0.0;
-			double       t = e > 1e-9 ? (b * s + f) / e : 0.0;
-			if (t < 0.0) {
-				t = 0.0;
-				s = a > 1e-9 ? Clamp01(-c / a) : 0.0;
-			} else if (t > 1.0) {
-				t = 1.0;
-				s = a > 1e-9 ? Clamp01((b - c) / a) : 0.0;
-			}
-			a_s = s;
-			a_t = t;
-		}
+	double Vec2::Length() const { return std::sqrt(x * x + y * y); }
 
-		Vec3 Lerp(const Vec3& a_a, const Vec3& a_b, double a_t)
-		{
-			return { a_a.x + (a_b.x - a_a.x) * a_t, a_a.y + (a_b.y - a_a.y) * a_t, a_a.z + (a_b.z - a_a.z) * a_t };
-		}
+	Vec2 Vec2::Normalized() const
+	{
+		const double l = Length();
+		return l > 1e-12 ? Vec2{ x / l, y / l } : Vec2{ 0.0, 0.0 };
+	}
+
+	double Vec3::Length() const { return std::sqrt(x * x + y * y + z * z); }
+
+	Vec3 Vec3::Normalized() const
+	{
+		const double l = Length();
+		return l > 1e-12 ? Vec3{ x / l, y / l, z / l } : Vec3{};
+	}
+
+	void Quat::ToMatrix(double a_m[3][3]) const
+	{
+		const double xx = x * x, yy = y * y, zz = z * z;
+		const double xy = x * y, xz = x * z, yz = y * z;
+		const double wx = w * x, wy = w * y, wz = w * z;
+		a_m[0][0] = 1.0 - 2.0 * (yy + zz);
+		a_m[0][1] = 2.0 * (xy - wz);
+		a_m[0][2] = 2.0 * (xz + wy);
+		a_m[1][0] = 2.0 * (xy + wz);
+		a_m[1][1] = 1.0 - 2.0 * (xx + zz);
+		a_m[1][2] = 2.0 * (yz - wx);
+		a_m[2][0] = 2.0 * (xz - wy);
+		a_m[2][1] = 2.0 * (yz + wx);
+		a_m[2][2] = 1.0 - 2.0 * (xx + yy);
+	}
+
+	Vec3 Quat::Rotate(const Vec3& a_v) const
+	{
+		double m[3][3];
+		ToMatrix(m);
+		return { m[0][0] * a_v.x + m[0][1] * a_v.y + m[0][2] * a_v.z, m[1][0] * a_v.x + m[1][1] * a_v.y + m[1][2] * a_v.z,
+			m[2][0] * a_v.x + m[2][1] * a_v.y + m[2][2] * a_v.z };
+	}
+
+	Quat Quat::AxisAngle(const Vec3& a_axis, double a_angle)
+	{
+		const Vec3   k = a_axis.Normalized();
+		const double s = std::sin(a_angle * 0.5);
+		return { std::cos(a_angle * 0.5), k.x * s, k.y * s, k.z * s };
+	}
+
+	Quat Quat::operator*(const Quat& a_o) const
+	{
+		return { w * a_o.w - x * a_o.x - y * a_o.y - z * a_o.z, w * a_o.x + x * a_o.w + y * a_o.z - z * a_o.y,
+			w * a_o.y - x * a_o.z + y * a_o.w + z * a_o.x, w * a_o.z + x * a_o.y - y * a_o.x + z * a_o.w };
 	}
 
 	void RotateBy(double a_m[3][3], const Vec3& a_w, double a_dt)
@@ -84,19 +111,32 @@ namespace bowl
 		}
 	}
 
-	double Vec2::Length() const { return std::sqrt(x * x + y * y); }
-
-	Vec2 Vec2::Normalized() const
-	{
-		const double l = Length();
-		return l > 1e-12 ? Vec2{ x / l, y / l } : Vec2{ 0.0, 0.0 };
-	}
+	// ---------------------------------------------------------------- the rack
 
 	Sim::Sim(const Spec& a_spec) :
 		_spec(a_spec)
 	{
+		BuildShape();
 		Rack();
 		Hold(0.0);
+	}
+
+	void Sim::BuildShape()
+	{
+		// BowlingPin01's profile as spheres up its axis (z from its foot, radius), and a ring of small ones round the
+		// foot so it stands flat and rocks on the rim. Its widest (the belly, where the ball hits) is about 10 up.
+		static constexpr std::array<std::array<double, 2>, 11> kBody{ { { 3.6, 3.4 }, { 6.6, 4.6 }, { 9.6, 5.3 }, { 12.6, 5.2 },
+			{ 15.6, 4.6 }, { 18.6, 3.7 }, { 21.6, 2.8 }, { 24.5, 2.2 }, { 27.4, 2.4 }, { 30.2, 2.8 }, { 32.8, 2.4 } } };
+		const double c = _spec.pinCentre;
+		_shape.clear();
+		for (int i = 0; i < 6; ++i) {
+			const double a = i * kPi / 3.0;
+			_shape.push_back({ { 1.5 * std::cos(a), 1.5 * std::sin(a), 0.9 - c }, 0.9 });
+		}
+		const double scale = _spec.pinHeight / 35.2;
+		for (const auto& s : kBody) {
+			_shape.push_back({ { 0.0, 0.0, s[0] * scale - c }, s[1] * scale });
+		}
 	}
 
 	Vec2 Sim::Spot(int a_pin) const
@@ -109,13 +149,35 @@ namespace bowl
 		return { _spec.headPin + rp[0] * s * kSqrt3 * 0.5, (rp[0] * 0.5 - rp[1]) * s };  // +y is the bowler's left
 	}
 
-	void Sim::Rack()
+	void Sim::StandPin(Pin& a_pin, const Vec2& a_at, double a_yaw) const
 	{
+		a_pin.state = PinState::kStanding;
+		a_pin.com = { a_at.x, a_at.y, _spec.pinCentre };
+		a_pin.rot = Quat::AxisAngle({ 0.0, 0.0, 1.0 }, a_yaw);
+		a_pin.vel = {};
+		a_pin.angVel = {};
+		a_pin.asleep = true;
+		a_pin.quiet = 0.0;
+		a_pin.frozen = false;
+	}
+
+	void Sim::Rack(double a_jitter, std::uint32_t a_seed)
+	{
+		std::uint32_t state = a_seed * 747796405u + 2891336453u;
+		auto          next = [&]() {  // (a small PCG-style hash: the same seed always racks the same way)
+			state = state * 747796405u + 2891336453u;
+			const std::uint32_t w = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+			return static_cast<double>((w >> 22u) ^ w) / 4294967296.0;
+		};
 		for (int i = 0; i < kPins; ++i) {
-			Pin p;
-			p.pos = Spot(i);
-			p.yaw = 0.7 * i;  // not all facing the same way
-			_pins[static_cast<std::size_t>(i)] = p;
+			Vec2 at = Spot(i);
+			if (a_jitter > 0.0) {
+				const double angle = next() * 2.0 * kPi;
+				const double r = a_jitter * std::sqrt(next());
+				at += Vec2{ std::cos(angle), std::sin(angle) } * r;
+			}
+			const double yaw = 0.7 * i + (a_jitter > 0.0 ? next() * 2.0 * kPi : 0.0);  // not all facing the same way
+			StandPin(_pins[static_cast<std::size_t>(i)], at, yaw);
 		}
 		_events.clear();
 	}
@@ -123,18 +185,20 @@ namespace bowl
 	void Sim::Sweep()
 	{
 		for (auto& p : _pins) {
-			if (p.state == PinState::kStanding && p.tilt < TippingAngle()) {
-				p.tilt = 0.0;
-				p.tiltRate = 0.0;
-				p.vel = {};
-				p.yawRate = 0.0;
-				p.z = 0.0;
+			if (p.state == PinState::kStanding && PinUpright(p)) {
+				// stood straight back up where it is, facing the way it was
+				const Vec3 fwd = p.rot.Rotate({ 1.0, 0.0, 0.0 });
+				StandPin(p, { p.com.x, p.com.y }, std::atan2(fwd.y, fwd.x));
 			} else {
 				p.state = PinState::kSwept;
+				p.frozen = true;
+				p.asleep = true;
 			}
 		}
 		_events.clear();
 	}
+
+	// ---------------------------------------------------------------- the ball
 
 	void Sim::Hold(double a_y)
 	{
@@ -159,75 +223,15 @@ namespace bowl
 		const Vec2   rollAxis{ -dir.y, dir.x };
 		const Vec2   axis = rollAxis * c - dir * s;
 		_ball.spin = { axis.x * a_release.revs, axis.y * a_release.revs, 0.0 };
+		_ball.drift = a_release.drift;
+		_ball.driftWave = a_release.driftWave;
+		_ball.driftPhase = a_release.driftPhase;
 		_standingAtThrow = StandingMask();
 		_sinceThrow = 0.0;
 		_still = 0.0;
 		_carry = 0.0;
 		_thrown = true;
-	}
-
-	double Sim::TippingAngle() const
-	{
-		return std::atan2(_spec.pinBaseRadius, _spec.pinCentre);
-	}
-
-	double Sim::PinInertia() const
-	{
-		// a slim stick pivoting on its base rim: centre of mass term plus its own length
-		const double h = _spec.pinCentre;
-		const double r = _spec.pinBaseRadius;
-		return _spec.pinMass * (h * h + r * r + _spec.pinHeight * _spec.pinHeight / 14.0);
-	}
-
-	Vec2 Sim::BellyOf(const Pin& a_pin) const
-	{
-		return a_pin.pos + a_pin.tiltDir * (kBellyHeight * std::sin(a_pin.tilt));
-	}
-
-	Vec3 Sim::PinAxis(int a_pin) const
-	{
-		const auto& p = _pins[static_cast<std::size_t>(a_pin)];
-		const double s = std::sin(p.tilt);
-		return { p.tiltDir.x * s, p.tiltDir.y * s, std::cos(p.tilt) };
-	}
-
-	void Sim::Advance(double a_seconds)
-	{
-		_carry += std::clamp(a_seconds, 0.0, 0.25);
-		while (_carry >= kStep) {
-			Step();
-			_carry -= kStep;
-		}
-	}
-
-	void Sim::Step()
-	{
-		if (!_thrown) {
-			return;
-		}
-		_sinceThrow += kStep;
-		StepBall(kStep);
-		BallHitsPins();
-		PinsHitPins();
-		StepPins(kStep);
-
-		// still: the ball's gone and no pin is moving
-		bool moving = _ball.state == BallState::kLane || _ball.state == BallState::kGutter;
-		for (const auto& p : _pins) {
-			if (p.state == PinState::kFalling) {
-				moving = true;
-			} else if (p.state == PinState::kStanding || p.state == PinState::kDown) {
-				if (p.vel.Length() > 1.5 || std::abs(p.tiltRate) > 0.05 || (p.state == PinState::kStanding && p.tilt > 0.01)) {
-					moving = true;
-				}
-			}
-		}
-		_still = moving ? 0.0 : _still + kStep;
-	}
-
-	bool Sim::Settled() const
-	{
-		return _thrown && (_still >= kSettleSeconds || _sinceThrow >= kGiveUpSeconds);
+		_lastWallHit.fill(-1.0);
 	}
 
 	void Sim::StepBall(double a_dt)
@@ -258,6 +262,8 @@ namespace bowl
 				b.spin.y = b.vel.x / R;
 			}
 			b.spin.z *= std::exp(-0.5 * a_dt);
+			// the lane's tilt and uneven oil nudge it across, a little
+			b.vel.y += (b.drift + b.driftWave * std::sin(b.pos.x * (2.0 * kPi / 450.0) + b.driftPhase)) * a_dt;
 			b.pos += b.vel * a_dt;
 			b.z = R;
 
@@ -284,150 +290,253 @@ namespace bowl
 		RotateBy(b.orient, b.spin, a_dt);
 	}
 
-	void Sim::PushPin(Pin& a_pin, const Vec2& a_dir, double a_impulse, double a_height)
+	// ---------------------------------------------------------------- stepping
+
+	void Sim::Advance(double a_seconds)
 	{
-		if (a_impulse <= 0.0) {
+		_carry += std::clamp(a_seconds, 0.0, 0.25);
+		while (_carry >= kStep) {
+			Step();
+			_carry -= kStep;
+		}
+	}
+
+	void Sim::Step()
+	{
+		if (!_thrown) {
 			return;
 		}
-		a_pin.vel += a_dir * (a_impulse / _spec.pinMass * kSlideShare);
-		const double spin = kTipShare * a_impulse * std::max(1.0, a_height) / PinInertia();
-		if (a_pin.state == PinState::kStanding && a_pin.tilt < 0.08) {
-			// nearly upright: the knock picks which way it leans
-			const Vec2   v = a_pin.tiltDir * a_pin.tiltRate + a_dir * spin;
-			const double l = v.Length();
-			if (l > 1e-9) {
-				a_pin.tiltDir = v * (1.0 / l);
-				a_pin.tiltRate = l;
+		_sinceThrow += kStep;
+		StepBall(kStep);
+		StepPins(kStep);
+
+		bool moving = _ball.state == BallState::kLane || _ball.state == BallState::kGutter;
+		for (const auto& p : _pins) {
+			// (pins already in a gutter or the pit can't change anything: only the ones on the deck count)
+			if (!p.frozen && !p.asleep && p.state != PinState::kGone) {
+				moving = true;
 			}
-		} else if (a_pin.state != PinState::kDown) {
-			const double along = a_dir.Dot(a_pin.tiltDir);
-			if (along >= 0.0) {
-				a_pin.tiltRate += spin * along;
-			} else {
-				// knocked back against the way it's falling: it loses its fall, it doesn't fly back up
-				a_pin.tiltRate = std::max(a_pin.tiltRate * 0.3, a_pin.tiltRate + spin * along);
-			}
-			a_pin.vel += (a_dir - a_pin.tiltDir * along) * (spin * a_height * 0.2);
 		}
-		a_pin.yawRate += (a_dir.x * a_pin.tiltDir.y - a_dir.y * a_pin.tiltDir.x) * spin * 2.0 + spin * 0.3;
+		_still = moving ? 0.0 : _still + kStep;
 	}
 
-	void Sim::BallHitsPins()
+	bool Sim::Settled() const
 	{
-		auto& b = _ball;
-		if (b.state != BallState::kLane) {
-			return;  // (a gutter ball never reaches a pin)
+		return _thrown && (_still >= kSettleSeconds || _sinceThrow >= kGiveUpSeconds);
+	}
+
+	double Sim::FloorAt(double a_x, double a_y) const
+	{
+		if (a_x > _spec.deckEnd) {
+			return -_spec.pitDepth;
 		}
-		const double R = _spec.ballRadius;
+		return std::abs(a_y) <= _spec.laneHalfWidth ? 0.0 : -_spec.gutterDepth;
+	}
+
+	// ---------------------------------------------------------------- rigid bodies
+
+	Vec3 Sim::InvInertiaTimes(int a_pin, const Vec3& a_v) const
+	{
+		const auto&  p = _pins[static_cast<std::size_t>(a_pin)];
+		const double It = _spec.pinMass * _spec.pinGyration * _spec.pinGyration;
+		const double Ia = _spec.pinMass * _spec.pinAxialGyration * _spec.pinAxialGyration;
+		double       m[3][3];
+		p.rot.ToMatrix(m);
+		// into the pin's own frame, scaled, and back
+		const Vec3 local{ m[0][0] * a_v.x + m[1][0] * a_v.y + m[2][0] * a_v.z, m[0][1] * a_v.x + m[1][1] * a_v.y + m[2][1] * a_v.z,
+			m[0][2] * a_v.x + m[1][2] * a_v.y + m[2][2] * a_v.z };
+		const Vec3 scaled{ local.x / It, local.y / It, local.z / Ia };
+		return { m[0][0] * scaled.x + m[0][1] * scaled.y + m[0][2] * scaled.z, m[1][0] * scaled.x + m[1][1] * scaled.y + m[1][2] * scaled.z,
+			m[2][0] * scaled.x + m[2][1] * scaled.y + m[2][2] * scaled.z };
+	}
+
+	Vec3 Sim::VelocityAt(int a_body, const Vec3& a_r) const
+	{
+		if (a_body == kWorld) {
+			return {};
+		}
+		if (a_body == kBallBody) {
+			return { _ball.vel.x, _ball.vel.y, 0.0 };
+		}
+		const auto& p = _pins[static_cast<std::size_t>(a_body)];
+		return p.vel + p.angVel.Cross(a_r);
+	}
+
+	double Sim::MassAlong(int a_body, const Vec3& a_r, const Vec3& a_dir) const
+	{
+		// 1 / (the effective mass this body has, pushed at a_r along a_dir)
+		if (a_body == kWorld) {
+			return 0.0;
+		}
+		if (a_body == kBallBody) {
+			return 1.0 / _spec.ballMass;
+		}
+		const Vec3 t = InvInertiaTimes(a_body, a_r.Cross(a_dir)).Cross(a_r);
+		return 1.0 / _spec.pinMass + a_dir.Dot(t);
+	}
+
+	void Sim::ApplyImpulse(int a_body, const Vec3& a_r, const Vec3& a_j)
+	{
+		if (a_body == kWorld) {
+			return;
+		}
+		if (a_body == kBallBody) {
+			// (the ball stays on the lane: only its travel across it changes)
+			_ball.vel += Vec2{ a_j.x, a_j.y } * (1.0 / _spec.ballMass);
+			return;
+		}
+		auto& p = _pins[static_cast<std::size_t>(a_body)];
+		p.vel += a_j * (1.0 / _spec.pinMass);
+		p.angVel += InvInertiaTimes(a_body, a_r.Cross(a_j));
+	}
+
+	void Sim::Collide(std::vector<Contact>& a_out)
+	{
+		a_out.clear();
+		const auto& s = _spec;
+		std::array<std::vector<Vec3>, kPins> centres;
 		for (int i = 0; i < kPins; ++i) {
-			auto& p = _pins[static_cast<std::size_t>(i)];
-			if (!PinActive(p)) {
+			const auto& p = _pins[static_cast<std::size_t>(i)];
+			if (p.frozen) {
 				continue;
 			}
-			Vec2   contact;   // the nearest point of the pin to the ball, seen from above
-			double reach;     // ball radius + the pin's there
-			double height;    // how far up the pin it is
-			if (p.state != PinState::kDown && p.tilt < 1.0) {
-				contact = BellyOf(p);
-				reach = R + _spec.pinRadius;
-				height = kBellyHeight;
-			} else {
-				const Vec2   top = p.pos + p.tiltDir * (_spec.pinHeight * std::sin(p.tilt));
-				const Vec2   seg = top - p.pos;
-				const double len2 = seg.Dot(seg);
-				const double t = len2 > 1e-9 ? Clamp01((b.pos - p.pos).Dot(seg) / len2) : 0.0;
-				contact = p.pos + seg * t;
-				reach = R + _spec.pinBodyRadius;
-				height = t * _spec.pinHeight;
+			auto& c = centres[static_cast<std::size_t>(i)];
+			c.reserve(_shape.size());
+			for (const auto& sp : _shape) {
+				c.push_back(p.com + p.rot.Rotate(sp.at));
 			}
-			const Vec2   d = contact - b.pos;
-			const double dist = d.Length();
-			if (dist >= reach || dist < 1e-9) {
-				continue;
-			}
-			const Vec2   n = d * (1.0 / dist);
-			const Vec2   pinVel = p.vel + p.tiltDir * (p.tiltRate * height * std::cos(p.tilt));
-			const double closing = (b.vel - pinVel).Dot(n);
-			// out of the overlap (the pin gives way, the ball barely does)
-			const double overlap = reach - dist;
-			p.pos += n * (overlap * 0.85);
-			b.pos -= n * (overlap * 0.15);
-			if (closing <= 0.0) {
-				continue;
-			}
-			const double J = (1.0 + _spec.pinRestitution) * closing / (1.0 / _spec.ballMass + 1.0 / _spec.pinMass);
-			b.vel -= n * (J / _spec.ballMass);
-			PushPin(p, n, J, height);
-			AddEvent(Event::Kind::kBallPin, contact, closing, i);
 		}
-	}
+		auto add = [&](int a_a, int a_b, const Vec3& a_point, const Vec3& a_n, double a_depth, double a_e, double a_mu) {
+			Contact k{};
+			k.a = a_a;
+			k.b = a_b;
+			k.point = a_point;
+			k.n = a_n;
+			k.depth = a_depth;
+			k.restitution = a_e;
+			k.friction = a_mu;
+			a_out.push_back(k);
+		};
 
-	void Sim::PinsHitPins()
-	{
-		const double L = _spec.pinHeight * 0.95;
-		const double r = _spec.pinBodyRadius;
-		auto segment = [&](const Pin& a_p, Vec3& a_base, Vec3& a_top) {
-			const double s = std::sin(a_p.tilt);
-			const double lift = a_p.state == PinState::kDown ? _spec.pinRadius * 0.8 : 0.0;
-			a_base = { a_p.pos.x, a_p.pos.y, a_p.z + lift };
-			a_top = { a_p.pos.x + a_p.tiltDir.x * s * L, a_p.pos.y + a_p.tiltDir.y * s * L, a_p.z + lift + std::cos(a_p.tilt) * L };
-		};
-		auto still = [&](const Pin& a_p) {
-			return a_p.state == PinState::kStanding && a_p.tilt < 0.02 && std::abs(a_p.tiltRate) < 0.05 && a_p.vel.Length() < 1.0;
-		};
+		// the lane and deck (a block: its top, its edges down into the gutters, its end over the pit), the gutters'
+		// floor, the pit's floor, the kickbacks and the pit's back cushion
+		const double L = s.laneHalfWidth;
+		for (int i = 0; i < kPins; ++i) {
+			const auto& p = _pins[static_cast<std::size_t>(i)];
+			if (p.frozen || p.asleep) {
+				continue;
+			}
+			const auto& c = centres[static_cast<std::size_t>(i)];
+			for (std::size_t k = 0; k < _shape.size(); ++k) {
+				const Vec3&  at = c[k];
+				const double r = _shape[k].r;
+				// the lane block: x up to the deck's end, |y| up to the lane's edge, z up to the surface
+				const Vec3 q{ std::min(at.x, s.deckEnd), std::clamp(at.y, -L, L), std::min(at.z, 0.0) };
+				const Vec3 d = at - q;
+				const double dl = d.Length();
+				if (dl > 1e-9) {
+					if (dl < r) {
+						add(kWorld, i, q, d * (1.0 / dl), r - dl, s.pinDeckRestitution, s.pinDeckFriction);
+					}
+				} else {
+					// inside it (pushed in past an edge): out through the nearest face
+					const double top = -at.z;
+					const double side = L - std::abs(at.y);
+					const double end = s.deckEnd - at.x;
+					if (top <= side && top <= end) {
+						add(kWorld, i, { at.x, at.y, 0.0 }, { 0.0, 0.0, 1.0 }, top + r, s.pinDeckRestitution, s.pinDeckFriction);
+					} else if (side <= end) {
+						const double sy = at.y >= 0.0 ? 1.0 : -1.0;
+						add(kWorld, i, { at.x, sy * L, at.z }, { 0.0, sy, 0.0 }, side + r, s.pinDeckRestitution, s.pinDeckFriction);
+					} else {
+						add(kWorld, i, { s.deckEnd, at.y, at.z }, { 1.0, 0.0, 0.0 }, end + r, s.pinDeckRestitution, s.pinDeckFriction);
+					}
+				}
+				// the gutters' floor beside it, and the pit's below the end
+				if (at.x <= s.deckEnd && std::abs(at.y) > L && at.z - r < -s.gutterDepth) {
+					add(kWorld, i, { at.x, at.y, -s.gutterDepth }, { 0.0, 0.0, 1.0 }, -s.gutterDepth - (at.z - r), s.pinDeckRestitution, s.pinDeckFriction);
+				}
+				if (at.x > s.deckEnd && at.z - r < -s.pitDepth) {
+					add(kWorld, i, { at.x, at.y, -s.pitDepth }, { 0.0, 0.0, 1.0 }, -s.pitDepth - (at.z - r), s.pinDeckRestitution, s.pinDeckFriction);
+				}
+				// the walls: the kickbacks round the deck, the gutters' far sides down the lane, the pit's back
+				const double wall = at.x > s.kickbackStart - 40.0 ? s.kickback : L + s.gutterWidth;
+				if (at.x < s.deckEnd + s.pitBack) {
+					if (at.y + r > wall) {
+						add(kWorld, i, { at.x, wall, at.z }, { 0.0, -1.0, 0.0 }, at.y + r - wall, s.pinWallRestitution, s.pinFriction);
+					} else if (at.y - r < -wall) {
+						add(kWorld, i, { at.x, -wall, at.z }, { 0.0, 1.0, 0.0 }, -wall - (at.y - r), s.pinWallRestitution, s.pinFriction);
+					}
+				}
+				if (at.x + r > s.deckEnd + s.pitBack) {
+					add(kWorld, i, { s.deckEnd + s.pitBack, at.y, at.z }, { -1.0, 0.0, 0.0 }, at.x + r - (s.deckEnd + s.pitBack), 0.1, s.pinFriction);
+				}
+			}
+		}
+
+		// pin on pin
+		const double reach = s.pinHeight + 2.0 * s.pinRadius;
 		for (int i = 0; i < kPins; ++i) {
 			auto& a = _pins[static_cast<std::size_t>(i)];
-			if (!PinActive(a)) {
+			if (a.frozen) {
 				continue;
 			}
 			for (int j = i + 1; j < kPins; ++j) {
-				auto& c = _pins[static_cast<std::size_t>(j)];
-				if (!PinActive(c) || (still(a) && still(c))) {
+				auto& b = _pins[static_cast<std::size_t>(j)];
+				if (b.frozen || (a.asleep && b.asleep) || (a.com - b.com).Length() > reach) {
 					continue;
 				}
-				// quick reject: too far apart for any part of them to touch
-				if ((a.pos - c.pos).Length() > 2.0 * (L + r)) {
+				const auto&       ca = centres[static_cast<std::size_t>(i)];
+				const auto&       cb = centres[static_cast<std::size_t>(j)];
+				const std::size_t before = a_out.size();
+				for (std::size_t m = 0; m < _shape.size(); ++m) {
+					for (std::size_t q = 0; q < _shape.size(); ++q) {
+						const Vec3   d = cb[q] - ca[m];
+						const double rr = _shape[m].r + _shape[q].r;
+						const double dist2 = d.Dot(d);
+						if (dist2 >= rr * rr) {
+							continue;
+						}
+						const double dist = std::sqrt(dist2);
+						const Vec3   n = dist > 1e-9 ? d * (1.0 / dist) : Vec3{ 1.0, 0.0, 0.0 };
+						add(i, j, ca[m] + n * (_shape[m].r - (rr - dist) * 0.5), n, rr - dist, s.pinPinRestitution, s.pinFriction);
+					}
+				}
+				if (a_out.size() > before) {
+					// a moving pin wakes a sleeping one it touches
+					a.asleep = false;
+					b.asleep = false;
+				}
+			}
+		}
+
+		// the ball on the pins (a gutter ball never reaches one)
+		if (_ball.state == BallState::kLane) {
+			const Vec3   centre{ _ball.pos.x, _ball.pos.y, _ball.z };
+			const double R = s.ballRadius;
+			for (int i = 0; i < kPins; ++i) {
+				auto& p = _pins[static_cast<std::size_t>(i)];
+				if (p.frozen) {
 					continue;
 				}
-				Vec3 a0, a1, c0, c1;
-				segment(a, a0, a1);
-				segment(c, c0, c1);
-				double s = 0.0, t = 0.0;
-				ClosestOnSegments(a0, a1, c0, c1, s, t);
-				const Vec3   pa = Lerp(a0, a1, s);
-				const Vec3   pc = Lerp(c0, c1, t);
-				const Vec3   d{ pc.x - pa.x, pc.y - pa.y, pc.z - pa.z };
-				const double dist = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
-				if (dist >= 2.0 * r) {
+				const Vec3 off = p.com - centre;
+				if (off.Length() > R + s.pinHeight) {
 					continue;
 				}
-				Vec2 n{ d.x, d.y };
-				if (n.Length() < 1e-6) {
-					n = c.pos - a.pos;
+				const auto&       c = centres[static_cast<std::size_t>(i)];
+				const std::size_t before = a_out.size();
+				for (std::size_t k = 0; k < _shape.size(); ++k) {
+					const Vec3   d = c[k] - centre;
+					const double rr = R + _shape[k].r;
+					const double dist = d.Length();
+					if (dist >= rr || dist < 1e-9) {
+						continue;
+					}
+					const Vec3 n = d * (1.0 / dist);
+					add(kBallBody, i, centre + n * R, n, rr - dist, s.pinRestitution, s.pinFriction);
 				}
-				n = n.Normalized();
-				if (n.Length() < 0.5) {
-					n = { 1.0, 0.0 };
-				}
-				const double ha = s * L;
-				const double hc = t * L;
-				const Vec2   va = a.vel + a.tiltDir * (a.tiltRate * ha * std::cos(a.tilt));
-				const Vec2   vc = c.vel + c.tiltDir * (c.tiltRate * hc * std::cos(c.tilt));
-				const double closing = (va - vc).Dot(n);
-				// apart: each moves half the overlap (standing pins hardly at all: their base grips)
-				const double overlap = 2.0 * r - dist;
-				const double wa = still(a) ? 0.1 : 1.0;
-				const double wc = still(c) ? 0.1 : 1.0;
-				a.pos -= n * (overlap * wa / (wa + wc));
-				c.pos += n * (overlap * wc / (wa + wc));
-				if (closing <= 0.0) {
-					continue;
-				}
-				const double J = (1.0 + _spec.pinPinRestitution) * closing / (2.0 / _spec.pinMass);
-				PushPin(c, n, J, hc);
-				PushPin(a, n * -1.0, J, ha);
-				if (closing > 15.0) {
-					AddEvent(Event::Kind::kPinPin, { (pa.x + pc.x) * 0.5, (pa.y + pc.y) * 0.5 }, closing, j);
+				if (a_out.size() > before) {
+					p.asleep = false;
 				}
 			}
 		}
@@ -435,122 +544,187 @@ namespace bowl
 
 	void Sim::StepPins(double a_dt)
 	{
-		const double g = _spec.gravity;
-		const double I = PinInertia();
-		const double tip = TippingAngle();
+		const auto& s = _spec;
+		const double g = s.gravity;
+
+		// gravity on everything awake
+		for (auto& p : _pins) {
+			if (!p.frozen && !p.asleep) {
+				p.vel.z -= g * a_dt;
+			}
+		}
+
+		Collide(_contacts);
+		const Vec3 ballCentre{ _ball.pos.x, _ball.pos.y, _ball.z };
+		auto       comOf = [&](int a_body) -> Vec3 {
+            if (a_body == kBallBody) {
+                return ballCentre;
+            }
+            return a_body >= 0 ? _pins[static_cast<std::size_t>(a_body)].com : Vec3{};
+		};
+
+		// each contact's lever arms, effective mass and the speed it should part at (a bounce, and pushing out any
+		// overlap)
+		for (auto& k : _contacts) {
+			k.ra = k.a == kWorld ? Vec3{} : k.point - comOf(k.a);
+			k.rb = k.point - comOf(k.b);
+			const double inv = MassAlong(k.a, k.ra, k.n) + MassAlong(k.b, k.rb, k.n);
+			k.massN = inv > 1e-12 ? 1.0 / inv : 0.0;
+			const double vn = (VelocityAt(k.b, k.rb) - VelocityAt(k.a, k.ra)).Dot(k.n);
+			const double bounce = vn < -kBounceFrom ? -k.restitution * vn : 0.0;
+			const double push = std::min(kMaxPush, kPush * std::max(0.0, k.depth - kSlop) / a_dt);
+			k.bias = std::max(bounce, push);
+			k.jn = 0.0;
+			k.jt = 0.0;
+
+			// (sounds: real impacts only, not things resting on each other)
+			if (vn < -40.0 && _events.size() < 256) {
+				const Vec2 at{ k.point.x, k.point.y };
+				if (k.a == kBallBody) {
+					AddEvent(Event::Kind::kBallPin, at, -vn, k.b);
+				} else if (k.a >= 0) {
+					AddEvent(Event::Kind::kPinPin, at, -vn, k.b);
+				} else if (k.n.z > 0.5) {
+					AddEvent(Event::Kind::kPinDeck, at, -vn, k.b);
+				} else if (_sinceThrow - _lastWallHit[static_cast<std::size_t>(k.b)] > 0.1) {
+					_lastWallHit[static_cast<std::size_t>(k.b)] = _sinceThrow;
+					AddEvent(Event::Kind::kPinWall, at, -vn, k.b);
+				}
+			}
+		}
+		// (one event of each kind per pin per step is plenty)
+		std::sort(_events.begin(), _events.end(), [](const Event& a_l, const Event& a_r) {
+			return a_l.pin != a_r.pin ? a_l.pin < a_r.pin : a_l.kind != a_r.kind ? a_l.kind < a_r.kind : a_l.strength > a_r.strength;
+		});
+		_events.erase(std::unique(_events.begin(), _events.end(), [](const Event& a_l, const Event& a_r) {
+			return a_l.pin == a_r.pin && a_l.kind == a_r.kind && a_l.pin >= 0;
+		}), _events.end());
+
+		// sequential impulses: push the contacts apart (never pulling) and let friction act within its cone
+		std::vector<Vec3> friction(_contacts.size());
+		for (int it = 0; it < kIterations; ++it) {
+			for (std::size_t c = 0; c < _contacts.size(); ++c) {
+				auto&      k = _contacts[c];
+				Vec3       rel = VelocityAt(k.b, k.rb) - VelocityAt(k.a, k.ra);
+				const double vn = rel.Dot(k.n);
+				double     dj = k.massN * (k.bias - vn);
+				const double jn = std::max(0.0, k.jn + dj);
+				dj = jn - k.jn;
+				k.jn = jn;
+				const Vec3 J = k.n * dj;
+				ApplyImpulse(k.b, k.rb, J);
+				ApplyImpulse(k.a, k.ra, -J);
+
+				rel = VelocityAt(k.b, k.rb) - VelocityAt(k.a, k.ra);
+				const Vec3   vt = rel - k.n * rel.Dot(k.n);
+				const double vtl = vt.Length();
+				if (vtl > 1e-6) {
+					const Vec3   t = vt * (1.0 / vtl);
+					const double inv = MassAlong(k.a, k.ra, t) + MassAlong(k.b, k.rb, t);
+					if (inv > 1e-12) {
+						Vec3         want = friction[c] - t * (vtl / inv);
+						const double limit = k.friction * k.jn;
+						const double wl = want.Length();
+						if (wl > limit) {
+							want = want * (limit / wl);
+						}
+						const Vec3 dt = want - friction[c];
+						friction[c] = want;
+						ApplyImpulse(k.b, k.rb, dt);
+						ApplyImpulse(k.a, k.ra, -dt);
+					}
+				}
+			}
+		}
+
+		// move, turn, roll to a stop, sleep, and see where each pin's got to
+		std::array<bool, kPins> onFloor{};
+		for (const auto& k : _contacts) {
+			if (k.a == kWorld && k.n.z > 0.5) {
+				onFloor[static_cast<std::size_t>(k.b)] = true;
+			}
+		}
 		for (int i = 0; i < kPins; ++i) {
 			auto& p = _pins[static_cast<std::size_t>(i)];
-			if (p.state == PinState::kGone) {
-				// dropping out of sight into the pit or a gutter
-				p.drop += g * a_dt;
-				p.z = std::max(-60.0, p.z - p.drop * a_dt);
-				p.pos += p.vel * a_dt;
-				p.vel = p.vel * std::exp(-3.0 * a_dt);
+			if (p.frozen || p.asleep) {
 				continue;
 			}
-			if (!PinActive(p)) {
-				continue;
+			if (onFloor[static_cast<std::size_t>(i)]) {
+				// a pin rolling on its side (or spinning on the deck) slowly loses it
+				const double keep = std::exp(-s.pinRolling * a_dt);
+				p.angVel = p.angVel * keep;
+				p.vel.x *= keep;
+				p.vel.y *= keep;
+			}
+			p.com += p.vel * a_dt;
+			const Quat spin{ 0.0, p.angVel.x, p.angVel.y, p.angVel.z };
+			const Quat dq = spin * p.rot;
+			p.rot.w += 0.5 * a_dt * dq.w;
+			p.rot.x += 0.5 * a_dt * dq.x;
+			p.rot.y += 0.5 * a_dt * dq.y;
+			p.rot.z += 0.5 * a_dt * dq.z;
+			const double l = std::sqrt(p.rot.w * p.rot.w + p.rot.x * p.rot.x + p.rot.y * p.rot.y + p.rot.z * p.rot.z);
+			p.rot.w /= l;
+			p.rot.x /= l;
+			p.rot.y /= l;
+			p.rot.z /= l;
+
+			// asleep once it's settled (a standing pin doesn't creep)
+			// (resting on the deck, or on another pin)
+			if (p.vel.Length() < kSleepSpeed && p.angVel.Length() < kSleepSpin) {
+				p.quiet += a_dt;
+				if (p.quiet >= kSleepAfter) {
+					p.asleep = true;
+					p.vel = {};
+					p.angVel = {};
+				}
+			} else {
+				p.quiet = 0.0;
 			}
 
-			// rocking and falling: gravity about the rim of the base
-			if (p.state == PinState::kStanding || p.state == PinState::kFalling) {
-				const double torque = _spec.pinMass * g * (_spec.pinCentre * std::sin(p.tilt) - _spec.pinBaseRadius * std::cos(p.tilt));
-				p.tiltRate += torque / I * a_dt;
-				if (p.state == PinState::kStanding) {
-					p.tiltRate *= std::exp(-1.5 * a_dt);  // (a rocking pin loses its wobble)
+			// where it is now
+			const PinState was = p.state;
+			if (p.com.z < -2.0 || p.com.x > s.deckEnd) {
+				p.state = PinState::kGone;  // in a gutter or over the back into the pit
+				if (was != PinState::kGone && p.com.x > s.deckEnd) {
+					AddEvent(Event::Kind::kPinPit, { p.com.x, p.com.y }, p.vel.Length(), i);
 				}
-				p.tilt += p.tiltRate * a_dt;
-				if (p.state == PinState::kFalling && p.tilt < 0.0) {
-					// swung back past upright: it's falling the other way now
-					p.tilt = -p.tilt;
-					p.tiltDir = p.tiltDir * -1.0;
-					p.tiltRate = -p.tiltRate;
+				if (p.com.z < -s.pitDepth * 0.5) {
+					p.frozen = true;  // (out of sight at the bottom of the pit)
+					p.asleep = true;
 				}
-				if (p.state == PinState::kStanding) {
-					if (p.tilt <= 0.0) {
-						// back on its base: rocks over to the other side, with less, or settles
-						p.tilt = -p.tilt;
-						p.tiltDir = p.tiltDir * -1.0;
-						p.tiltRate = -p.tiltRate * 0.35;
-						if (std::abs(p.tiltRate) < 0.25) {
-							p.tilt = 0.0;
-							p.tiltRate = 0.0;
-						}
-					} else if (p.tilt > tip && p.tiltRate > 0.0) {
-						p.state = PinState::kFalling;  // past the point of no return
-					}
-				}
-				if (p.state == PinState::kFalling && p.tilt >= kHalfPi) {
-					// down: some of the fall goes into sliding along the deck
-					p.vel += p.tiltDir * (p.tiltRate * _spec.pinCentre * 0.35);
-					AddEvent(Event::Kind::kPinDeck, p.pos, p.tiltRate * _spec.pinCentre, i);
-					p.tilt = kHalfPi;
-					p.tiltRate = 0.0;
-					p.state = PinState::kDown;
-				}
-			}
-
-			// sliding on the deck
-			const double speed = p.vel.Length();
-			if (speed > 1e-6) {
-				// (a fast pin is mostly in the air: the deck hardly slows it)
-				const double grip = speed > kFlyingSpeed ? 0.15 : p.state == PinState::kDown ? 1.0 : 0.6;
-				const double friction = _spec.pinSlideFriction * g * grip;
-				const double slower = std::max(0.0, speed - friction * a_dt);
-				const Vec2   dir = p.vel * (1.0 / speed);
-				p.vel = p.vel * (slower / speed);
-				// an upright pin pushed along trips over its own base: the deck holds its foot back, its top goes on
-				if (p.state != PinState::kDown && slower > 0.0) {
-					const double trip = friction * _spec.pinMass * _spec.pinCentre / I * a_dt;
-					if (p.state == PinState::kStanding && p.tilt < 0.08) {
-						const Vec2   v = p.tiltDir * p.tiltRate + dir * trip;
-						const double l = v.Length();
-						if (l > 1e-9) {
-							p.tiltDir = v * (1.0 / l);
-							p.tiltRate = l;
-						}
-					} else {
-						p.tiltRate += trip * std::max(0.0, dir.Dot(p.tiltDir));
-					}
-				}
-			}
-			p.pos += p.vel * a_dt;
-			p.yaw += p.yawRate * a_dt;
-			p.yawRate *= std::exp(-2.0 * a_dt);
-
-			// the kickbacks (both ends of a lying pin): it bounces back onto the deck
-			if (p.pos.x > _spec.kickbackStart - 40.0) {
-				const double outer = std::max(std::abs(p.pos.y), std::abs(p.pos.y + p.tiltDir.y * std::sin(p.tilt) * _spec.pinHeight));
-				if (outer + _spec.pinBodyRadius > _spec.kickback && p.vel.y * p.pos.y > 0.0) {
-					const double hit = std::abs(p.vel.y);
-					p.vel.y = -p.vel.y * _spec.pinWallRestitution;
-					p.yawRate += hit * 0.05;
-					AddEvent(Event::Kind::kPinWall, p.pos, hit, i);
-				}
-			}
-
-			// off the deck: the pit at the back, the gutters at the sides (a fast pin flies over a gutter)
-			if (p.pos.x > _spec.deckEnd) {
-				p.state = PinState::kGone;
-				p.drop = 0.0;
-				AddEvent(Event::Kind::kPinPit, p.pos, p.vel.Length(), i);
-			} else if (std::abs(p.pos.y) > _spec.laneHalfWidth + 4.0 && p.vel.Length() < kFlyingSpeed) {
-				p.state = PinState::kGone;
-				p.drop = 0.0;
-				p.vel.y *= 0.2;
-			} else if (p.pos.x < -40.0) {
-				p.state = PinState::kGone;  // (all the way back up the lane: as good as gone)
-				p.drop = 0.0;
+			} else {
+				p.state = PinUpright(p) ? PinState::kStanding : PinState::kDown;
 			}
 		}
 	}
+
+	bool Sim::PinUpright(const Pin& a_pin) const
+	{
+		const Vec3 axis = a_pin.rot.Rotate({ 0.0, 0.0, 1.0 });
+		return axis.z > kUprightCos && a_pin.com.z > _spec.pinCentre * 0.7;
+	}
+
+	void Sim::PinPose(int a_pin, Vec3& a_base, double a_rot[3][3]) const
+	{
+		const auto& p = _pins[static_cast<std::size_t>(a_pin)];
+		p.rot.ToMatrix(a_rot);
+		a_base = p.com + p.rot.Rotate({ 0.0, 0.0, -_spec.pinCentre });
+	}
+
+	Vec3 Sim::PinAxis(int a_pin) const
+	{
+		return _pins[static_cast<std::size_t>(a_pin)].rot.Rotate({ 0.0, 0.0, 1.0 });
+	}
+
+	// ---------------------------------------------------------------- counting
 
 	std::uint32_t Sim::StandingMask() const
 	{
 		std::uint32_t mask = 0;
 		for (int i = 0; i < kPins; ++i) {
 			const auto& p = _pins[static_cast<std::size_t>(i)];
-			if (p.state == PinState::kStanding && p.tilt < TippingAngle()) {
+			if (p.state == PinState::kStanding && PinUpright(p)) {
 				mask |= 1u << i;
 			}
 		}
@@ -559,20 +733,12 @@ namespace bowl
 
 	int Sim::StandingCount() const
 	{
-		int n = 0;
-		for (std::uint32_t m = StandingMask(); m; m &= m - 1) {
-			++n;
-		}
-		return n;
+		return static_cast<int>(std::popcount(StandingMask()));
 	}
 
 	int Sim::DownThisBall() const
 	{
-		int n = 0;
-		for (std::uint32_t m = _standingAtThrow & ~StandingMask(); m; m &= m - 1) {
-			++n;
-		}
-		return n;
+		return static_cast<int>(std::popcount(_standingAtThrow & ~StandingMask()));
 	}
 
 	std::vector<Event> Sim::TakeEvents()

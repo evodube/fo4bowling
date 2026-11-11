@@ -189,7 +189,7 @@ namespace fb::Hud
 			const float nx = cx + 30.0f - k * hw * 0.5f;  // (left on screen is the hook to the left)
 			DL::AddTriangleFilled(a_v.dl, a_v.P(nx, hy - 2.0f), a_v.P(nx - 6.0f, hy - 12.0f), a_v.P(nx + 6.0f, hy - 12.0f), kHot);
 			const std::string hook = std::abs(a_st.hook) < 0.5f ? std::string("STRAIGHT") :
-			                         std::format("{} {:.0f}", a_st.hook > 0.0f ? "LEFT" : "RIGHT", std::abs(a_st.hook));
+			                         std::format("{} {:.0f}%", a_st.hook > 0.0f ? "LEFT" : "RIGHT", std::abs(a_st.hook));
 			Print(a_v, hook, cx + 222.0f, hy - 7.0f, 12.0f, kBright, Align::kRight, false);
 
 			// power: 20 segments, filled as you pull
@@ -208,6 +208,27 @@ namespace fb::Hud
 				kBright, Align::kRight, false);
 
 			Print(a_v, a_st.keys, cx, a_v.h - 26.0f, 11.0f, kDim, Align::kCentre);
+		}
+
+		// the aim line: green from the ball out along your aim, fading as it goes
+		void Guide(ImGuiViewport* a_viewport, const Game::HudState& a_st)
+		{
+			auto* dl = GetBackgroundDrawList();
+			if (!dl || a_st.guide.size() < 2) {
+				return;
+			}
+			const float  scale = std::max(0.1f, a_viewport->Size.y / 720.0f);
+			const auto   at = [&](const std::array<float, 2>& a_p) {
+				return ImVec2{ a_viewport->Pos.x + a_p[0] * a_viewport->Size.x, a_viewport->Pos.y + a_p[1] * a_viewport->Size.y };
+			};
+			const std::size_t n = a_st.guide.size();
+			for (std::size_t i = 1; i < n; ++i) {
+				const float  fade = 1.0f - static_cast<float>(i) / static_cast<float>(n);
+				const ImVec2 a = at(a_st.guide[i - 1]);
+				const ImVec2 b = at(a_st.guide[i]);
+				DL::AddLine(dl, a, b, Rgba(40, 255, 90, 0.25f * fade), 7.0f * scale);  // (a soft glow under it)
+				DL::AddLine(dl, a, b, Rgba(120, 255, 140, 0.95f * fade + 0.05f), 2.5f * scale);
+			}
 		}
 
 		// "STRIKE!" in the middle of the screen
@@ -245,6 +266,7 @@ namespace fb::Hud
 				Prompt(v, st);
 				return;
 			}
+			Guide(viewport, st);
 			Sheet(v, st);
 			if (st.aiming) {
 				Meters(v, st);

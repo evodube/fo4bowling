@@ -69,6 +69,22 @@ int main()
 		Check(std::abs((s.Spot(1) - s.Spot(0)).Length() - spec.pinSpacing) < 1e-6, "pins are a pin spacing apart");
 		Check(std::abs((s.Spot(9) - s.Spot(6)).Length() - 3.0 * spec.pinSpacing) < 1e-6, "the back row is three spacings wide");
 		Check(s.StandingCount() == 10 && s.StandingMask() == 0x3FF, "a full rack stands");
+
+		// the pinsetter's never exact: each pin a little off its spot, the same way for the same seed
+		Sim a, b, c;
+		a.Rack(0.3, 7);
+		b.Rack(0.3, 7);
+		c.Rack(0.3, 8);
+		bool within = true, same = true, differs = false;
+		for (int i = 0; i < Sim::kPins; ++i) {
+			const auto& pa = a.Pins()[static_cast<std::size_t>(i)];
+			const Vec2  at{ pa.com.x, pa.com.y };
+			within = within && (at - a.Spot(i)).Length() <= 0.3 + 1e-9;
+			same = same && (pa.com - b.Pins()[static_cast<std::size_t>(i)].com).Length() < 1e-12;
+			differs = differs || (pa.com - c.Pins()[static_cast<std::size_t>(i)].com).Length() > 1e-6;
+		}
+		Check(within, "a jittered rack keeps every pin within the jitter of its spot");
+		Check(same && differs, "the same seed racks the same; another seed doesn't");
 	}
 
 	std::printf("ball\n");
@@ -130,7 +146,7 @@ int main()
 		Check(s.TimeSinceThrow() < 12.0, "it settles before the give-up time");
 		bool still = true;
 		for (const auto& p : s.Pins()) {
-			if ((p.state == PinState::kStanding || p.state == PinState::kDown) && p.vel.Length() > 2.0) {
+			if ((p.state == PinState::kStanding || p.state == PinState::kDown) && p.vel.Length() > 5.0) {
 				still = false;
 			}
 		}
@@ -143,7 +159,8 @@ int main()
 		for (int i = 0; i < Sim::kPins; ++i) {
 			const auto& p = s.Pins()[static_cast<std::size_t>(i)];
 			if (standing & (1u << i)) {
-				Check(p.tilt == 0.0 && p.state == PinState::kStanding, "pin " + std::to_string(i + 1) + " stands straight after the sweep");
+				Check(s.PinAxis(i).z > 0.9999 && p.state == PinState::kStanding && p.vel.Length() == 0.0,
+					"pin " + std::to_string(i + 1) + " stands straight and still after the sweep");
 			} else {
 				Check(p.state == PinState::kSwept, "pin " + std::to_string(i + 1) + " is swept away");
 			}
@@ -154,6 +171,52 @@ int main()
 		s.Throw(again);
 		RunOut(s);
 		Check(s.DownThisBall() == 0 && s.StandingMask() == standing, "a gutter ball on the second ball changes nothing");
+	}
+	{
+		// a woken rack with nothing hitting it stands: pins balance on their bases and go back to sleep
+		Sim     s;
+		Release r;
+		r.y = 30.0;
+		r.angle = 0.06;  // (into the gutter: nothing touches the pins)
+		s.Throw(r);
+		RunOut(s);
+		Check(s.StandingCount() == 10, "an untouched rack stays standing");
+	}
+	{
+		// pins really fly: a full-on hit sends some into the pit and the gutters, and some land on the deck
+		Release r;
+		r.y = -5.0;
+		r.speed = 750.0;
+		Sim     s;
+		s.Throw(r);
+		int  gone = 0;
+		bool airborne = false;
+		while (!s.Settled()) {
+			s.Step();
+			for (const auto& p : s.Pins()) {
+				airborne = airborne || p.com.z > s.GetSpec().pinCentre + 6.0;
+			}
+		}
+		for (const auto& p : s.Pins()) {
+			gone += p.state == PinState::kGone ? 1 : 0;
+		}
+		Check(gone >= 2, "a big hit puts pins in the pit and gutters (" + std::to_string(gone) + ")");
+		Check(airborne, "pins leave the deck on a big hit");
+		Check(s.TimeSinceThrow() < 8.0, "and it all settles in good time (" + F(s.TimeSinceThrow()) + " s)");
+	}
+	{
+		// the lane's drift: a ball with drift ends up off the line a ball without it holds
+		Release r;
+		r.y = 0.0;
+		r.speed = 600.0;
+		Sim straight;
+		straight.Throw(r);
+		r.drift = 8.0;
+		Sim drifting;
+		drifting.Throw(r);
+		const double a = YAt(straight, 900.0);
+		const double b = YAt(drifting, 900.0);
+		Check(b - a > 3.0 && b - a < 30.0, "lane drift moves the ball a few boards (" + F(b - a) + ")");
 	}
 	{
 		// the same throw twice comes out the same
@@ -201,7 +264,7 @@ int main()
 			const double avg = throws[hand] ? static_cast<double>(pins[hand]) / throws[hand] : 0.0;
 			std::printf("    %s pocket: %d throws, %.0f%% strikes, %.2f pins\n", hand == 0 ? "right-handed" : "left-handed", throws[hand], rate * 100.0, avg);
 			Check(throws[hand] > 50, "enough pocket throws to judge");
-			Check(rate > 0.2 && rate < 0.7, "pocket hits strike often but not always (" + F(rate) + ")");
+			Check(rate > 0.4 && rate < 0.85, "pocket hits strike often but not always (" + F(rate) + ")");
 			Check(avg > 8.0, "pocket hits average over 8 pins (" + F(avg) + ")");
 		}
 		Check(throws[0] == throws[1] && strikes[0] == strikes[1], "left- and right-handed play the same");

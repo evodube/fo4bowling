@@ -31,7 +31,7 @@ namespace fb
 			bool                     aiming{ false };
 			bool                     charging{ false };
 			float                    power{ 0.0f };
-			float                    hook{ 0.0f };  // degrees, + to the left
+			float                    hook{ 0.0f };  // percent of full, + to the left
 			float                    maxHook{ 60.0f };
 			int                      board{ 20 };   // where the ball is on the foul line (1 = the right edge)
 			std::string              banner;        // "STRIKE!"
@@ -39,6 +39,7 @@ namespace fb
 			float                    bannerAlpha{ 0.0f };
 			bool                     over{ false };
 			std::string              keys;          // the controls, along the bottom
+			std::vector<std::array<float, 2>> guide;  // the aim line, screen points 0..1 from the ball outwards
 		};
 		HudState Hud() const;
 
@@ -113,6 +114,7 @@ namespace fb
 		RE::NiPoint3        HeldPoint() const;                                  // the ball at the foul line
 		bool                StillHere() const;  // in the alley, alive, not in a fight
 		std::string         SplitName() const;  // "7-10 SPLIT" or empty
+		void                UpdateGuide();
 
 		// ------------------------------------------------ the camera (Camera.cpp)
 		void EnterCamera();
@@ -135,7 +137,12 @@ namespace fb
 		int                                      _active{ 0 };     // the ball in play
 		std::vector<RE::ObjectRefHandle>         _hiddenVanilla;   // pins and balls we disabled
 		double                                   _releaseY{ 0.0 };
-		float                                    _hook{ 0.0f };    // degrees
+		float                                    _hook{ 0.0f };    // percent of full hook, + to the left
+		float                                    _swingHook{ 0.0f };  // what this swing adds to the hook (sideways mouse)
+		float                                    _lastPower{ 0.6f };
+		float HookNow() const { return std::clamp(_hook + _swingHook, -100.0f, 100.0f); }
+		std::vector<std::array<float, 2>>        _guide;
+		std::mt19937                             _rng{ std::random_device{}() };
 		float                                    _aimAngle{ 0.0f }; // radians, + left
 		bool                                     _lastBallGutter{ false };
 		std::chrono::steady_clock::time_point    _lastTick{};
@@ -149,7 +156,7 @@ namespace fb
 		int                                      _activateVk{ 0x46 };  // F, until the control map says otherwise
 		bool                                     _activateWasDown{ true };
 		bool                                     _lmbWasDown{ true };
-		std::array<bool, 5>                      _keyWasDown{};
+		std::array<bool, 7>                      _keyWasDown{};
 		float                                    _hookRepeat{ 0.0f };
 		std::chrono::steady_clock::time_point    _quitAt{};
 		bool                                     _quitArmed{ false };

@@ -7,10 +7,13 @@
 // the bowler's left, z is up from the lane surface. The game maps this onto each lane in the cell (Lanes.h).
 //
 // The ball is a solid sphere with real friction: it skids through the oil, hooks once the slip between its spin and
-// its travel grips the dry back end, and rolls once they match. The pins are rigid sticks that rock about the rim of
-// their base: a light touch makes them wobble and settle, a hard one tips them past the point of no return. A pin
-// that's falling or lying down is a capsule that knocks into the others, so pins take pins out the way they do in a
-// real alley (messengers off the kickbacks included).
+// its travel grips the dry back end, and rolls once they match.
+//
+// The pins are full rigid bodies: a real pin's mass and inertia, its shape built from spheres along its axis (with a
+// ring of small ones for its flat foot, so it stands on its base and rocks on the rim). Contacts with the ball, the
+// other pins, the deck, the gutters, the kickbacks and the pit are solved with impulses, friction and restitution, so
+// pins fly, tumble end over end, roll on their sides, bounce, wobble and settle, and drop into the gutters and pit
+// the way they do in a real alley.
 
 #include <array>
 #include <cstdint>
@@ -38,6 +41,31 @@ namespace bowl
 		double x{ 0.0 };
 		double y{ 0.0 };
 		double z{ 0.0 };
+
+		Vec3 operator+(const Vec3& a_o) const { return { x + a_o.x, y + a_o.y, z + a_o.z }; }
+		Vec3 operator-(const Vec3& a_o) const { return { x - a_o.x, y - a_o.y, z - a_o.z }; }
+		Vec3 operator*(double a_s) const { return { x * a_s, y * a_s, z * a_s }; }
+		Vec3 operator-() const { return { -x, -y, -z }; }
+		Vec3& operator+=(const Vec3& a_o) { x += a_o.x; y += a_o.y; z += a_o.z; return *this; }
+		Vec3& operator-=(const Vec3& a_o) { x -= a_o.x; y -= a_o.y; z -= a_o.z; return *this; }
+		double Dot(const Vec3& a_o) const { return x * a_o.x + y * a_o.y + z * a_o.z; }
+		Vec3   Cross(const Vec3& a_o) const { return { y * a_o.z - z * a_o.y, z * a_o.x - x * a_o.z, x * a_o.y - y * a_o.x }; }
+		double Length() const;
+		Vec3   Normalized() const;
+	};
+
+	// a rotation as a unit quaternion
+	struct Quat
+	{
+		double w{ 1.0 };
+		double x{ 0.0 };
+		double y{ 0.0 };
+		double z{ 0.0 };
+
+		Vec3 Rotate(const Vec3& a_v) const;
+		void ToMatrix(double a_m[3][3]) const;  // a_m * v = Rotate(v)
+		static Quat AxisAngle(const Vec3& a_axis, double a_angle);
+		Quat operator*(const Quat& a_o) const;
 	};
 
 	// Everything about the lane and the equipment. Defaults fit lanes 3 and 6 of Back Alley Bowling and the vanilla
@@ -52,6 +80,8 @@ namespace bowl
 		double kickback{ 112.0 };       // the side walls round the pin deck, either side of the middle
 		double kickbackStart{ 1024.0 }; // ...from here (the masking wall) to the deck's end
 		double deckEnd{ 1280.0 };       // past this: the pit
+		double pitDepth{ 80.0 };
+		double pitBack{ 70.0 };         // the pit's back cushion, this far past the deck's end
 		double oilLength{ 700.0 };      // the oiled front of the lane; dry from here on
 		double oilFriction{ 0.04 };     // ball-lane sliding friction on oil
 		double dryFriction{ 0.20 };     // ...and on the dry back end
@@ -62,19 +92,22 @@ namespace bowl
 		double ballRadius{ 9.25 };
 		double ballMass{ 7.0 };
 
-		// the pins (BowlingPin01: origin at the bottom middle, 35.2 tall, 5.46 at the widest)
-		double pinRadius{ 5.46 };      // the belly, where the ball hits
-		double pinBodyRadius{ 5.0 };   // the capsule a falling pin knocks others with
+		// the pins (BowlingPin01: origin at the bottom middle, 35.2 tall, 5.46 at the widest). Mass and inertia are a
+		// regulation pin's (1.5 kg, centre of mass 5.7 inches up) at these meshes' scale
+		double pinRadius{ 5.46 };      // at the belly, where the ball hits
 		double pinHeight{ 35.2 };
-		double pinBaseRadius{ 2.4 };   // it rocks about the rim of its base
 		double pinCentre{ 13.4 };      // centre of mass above the base
 		double pinMass{ 1.45 };
+		double pinGyration{ 9.4 };     // radius of gyration about a line across it through its centre of mass
+		double pinAxialGyration{ 3.2 };  // ...and about its own long axis
 		double pinSpacing{ 28.0 };     // pin spot to pin spot (12 inches at these meshes' scale)
-		double pinRestitution{ 0.65 }; // ball on pin
-		double pinPinRestitution{ 0.45 };
-		double pinWallRestitution{ 0.5 };
-		double pinSlideFriction{ 0.35 }; // a pin sliding on its side (or its base) on the deck
-		double ballWallRestitution{ 0.4 };
+		double pinRestitution{ 0.70 }; // ball on pin
+		double pinPinRestitution{ 0.55 };
+		double pinDeckRestitution{ 0.25 };
+		double pinWallRestitution{ 0.45 };
+		double pinFriction{ 0.30 };      // pin on pin, and ball on pin
+		double pinDeckFriction{ 0.35 };  // pin on the deck
+		double pinRolling{ 5.0 };        // how fast a pin rolling (or spinning) on the deck loses it, per second
 	};
 
 	enum class BallState : std::uint8_t
@@ -87,9 +120,8 @@ namespace bowl
 
 	enum class PinState : std::uint8_t
 	{
-		kStanding,  // upright, or rocking on its base
-		kFalling,   // past the tipping point, on its way down
-		kDown,      // lying on the deck (can still slide and knock others)
+		kStanding,  // upright (rocking a little counts)
+		kDown,      // knocked over, still on the deck
 		kGone,      // in the pit or a gutter
 		kSwept,     // taken away between balls
 	};
@@ -101,6 +133,9 @@ namespace bowl
 		double    z{ 0.0 };   // centre height above the lane
 		Vec2      vel;
 		Vec3      spin;       // angular velocity, radians per second
+		double    drift{ 0.0 };       // (this throw's drift, from its Release)
+		double    driftWave{ 0.0 };
+		double    driftPhase{ 0.0 };
 		// (for drawing) which way round it is: a lane-frame vector = orient * a vector in the ball's own frame
 		double orient[3][3]{ { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } };
 	};
@@ -108,19 +143,14 @@ namespace bowl
 	struct Pin
 	{
 		PinState state{ PinState::kStanding };
-		Vec2     pos;          // bottom middle
-		Vec2     vel;
-		Vec2     tiltDir{ 1.0, 0.0 };  // the way its top leans
-		double   tilt{ 0.0 };          // radians off upright
-		double   tiltRate{ 0.0 };
-		double   yaw{ 0.0 };           // (for drawing) turned about its own axis
-		double   yawRate{ 0.0 };
-		double   z{ 0.0 };             // its base's height (sinks into the pit or a gutter as it goes)
-		double   drop{ 0.0 };          // falling speed once it's left the deck
+		Vec3     com;        // centre of mass
+		Quat     rot;        // its own +z is its long axis, base to head
+		Vec3     vel;
+		Vec3     angVel;
+		bool     asleep{ true };
+		double   quiet{ 0.0 };  // how long it's barely moved
+		bool     frozen{ false };  // deep in the pit: no longer simulated
 	};
-
-	// a_m (a rotation) turned on by angular velocity a_w for a_dt seconds
-	void RotateBy(double a_m[3][3], const Vec3& a_w, double a_dt);
 
 	// What happened during a step: for sounds.
 	struct Event
@@ -149,21 +179,30 @@ namespace bowl
 		double speed{ 650.0 };  // units per second
 		double revs{ 30.0 };    // spin, radians per second
 		double axis{ 0.0 };     // the spin axis turned towards the throw, radians (+ hooks left, - right, 0 straight)
+		// the lane's own say: no lane is perfectly flat and evenly oiled, so a ball drifts a little left or right on its
+		// way down. A steady push across the lane, plus a wavering one, in units per second squared (+ left)
+		double drift{ 0.0 };
+		double driftWave{ 0.0 };
+		double driftPhase{ 0.0 };
 	};
+
+	// a_m (a rotation) turned on by angular velocity a_w for a_dt seconds
+	void RotateBy(double a_m[3][3], const Vec3& a_w, double a_dt);
 
 	class Sim
 	{
 	public:
 		static constexpr int    kPins = 10;
-		static constexpr double kStep = 1.0 / 240.0;
+		static constexpr double kStep = 1.0 / 480.0;
 
 		explicit Sim(const Spec& a_spec = {});
 
 		const Spec& GetSpec() const { return _spec; }
 		void        SetSpec(const Spec& a_spec) { _spec = a_spec; }
 
-		// all ten pins back on their spots
-		void Rack();
+		// all ten pins back on their spots. a_jitter: a pinsetter never puts them down exactly on the spot; each lands up
+		// to about that far off it (a_seed picks how)
+		void Rack(double a_jitter = 0.0, std::uint32_t a_seed = 0);
 		// the pins that are down are taken away, the standing ones stand up straight where they are
 		void Sweep();
 		// where pin n (0 = the head pin, 1..9 the 2- to 10-pin) stands in a full rack
@@ -179,7 +218,7 @@ namespace bowl
 		void Step();
 
 		// the ball's gone and nothing's moved for a while (or it's taken too long)
-		bool Settled() const;
+		bool   Settled() const;
 		double TimeSinceThrow() const { return _sinceThrow; }
 
 		// pins standing, as a bitmask (bit n = pin n), and how many
@@ -188,28 +227,58 @@ namespace bowl
 		// pins knocked down by the ball just thrown (counting from the pins that stood when it was thrown)
 		int DownThisBall() const;
 
-		const Ball&                     GetBall() const { return _ball; }
-		const std::array<Pin, kPins>&   Pins() const { return _pins; }
-		std::vector<Event>              TakeEvents();
+		const Ball&                   GetBall() const { return _ball; }
+		const std::array<Pin, kPins>& Pins() const { return _pins; }
+		std::vector<Event>            TakeEvents();
 
-		// the pin's top, for drawing: base + its axis * height
+		// for drawing pin n: the bottom middle of its base (the mesh's origin), and its rotation (lane = a_rot * own)
+		void PinPose(int a_pin, Vec3& a_base, double a_rot[3][3]) const;
+		// the pin's long axis (base to head), lane frame
 		Vec3 PinAxis(int a_pin) const;
-		// furthest the ball has got down the lane, and its y there (for the log)
+		bool PinUpright(const Pin& a_pin) const;
 		double BallX() const { return _ball.pos.x; }
 
 	private:
-		bool PinActive(const Pin& a_pin) const { return a_pin.state == PinState::kStanding || a_pin.state == PinState::kFalling || a_pin.state == PinState::kDown; }
-		double TippingAngle() const;
-		double PinInertia() const;  // about the rim of its base
-		Vec2   BellyOf(const Pin& a_pin) const;  // the pin's widest part, seen from above
+		struct Sphere
+		{
+			Vec3   at;  // from the centre of mass, the pin's own frame
+			double r;
+		};
+
+		// one point where two things touch, solved for with impulses
+		struct Contact
+		{
+			int    a;        // pin index, or kWorld / kBallBody
+			int    b;        // pin index (always a pin)
+			Vec3   point;
+			Vec3   n;        // from a to b
+			double depth;
+			double restitution;
+			double friction;
+			Vec3   ra, rb;   // from each body's centre of mass to the point
+			double massN{ 0.0 };
+			double bias{ 0.0 };
+			double jn{ 0.0 };
+			double jt{ 0.0 };
+			bool   eventSent{ false };
+		};
+		static constexpr int kWorld = -1;
+		static constexpr int kBallBody = -2;
+
+		void   BuildShape();
+		void   StandPin(Pin& a_pin, const Vec2& a_at, double a_yaw) const;
+		double FloorAt(double a_x, double a_y) const;
 		void   StepBall(double a_dt);
 		void   StepPins(double a_dt);
-		void   BallHitsPins();
-		void   PinsHitPins();
-		void   PushPin(Pin& a_pin, const Vec2& a_dir, double a_impulse, double a_height);
+		void   Collide(std::vector<Contact>& a_out);
+		Vec3   VelocityAt(int a_body, const Vec3& a_r) const;
+		Vec3   InvInertiaTimes(int a_pin, const Vec3& a_v) const;
+		void   ApplyImpulse(int a_body, const Vec3& a_r, const Vec3& a_j);
+		double MassAlong(int a_body, const Vec3& a_r, const Vec3& a_dir) const;
 		void   AddEvent(Event::Kind a_kind, const Vec2& a_pos, double a_strength, int a_pin = -1);
 
 		Spec                   _spec;
+		std::vector<Sphere>    _shape;
 		Ball                   _ball;
 		std::array<Pin, kPins> _pins{};
 		std::uint32_t          _standingAtThrow{ 0 };
@@ -218,5 +287,7 @@ namespace bowl
 		double                 _still{ 0.0 };  // how long nothing's moved
 		bool                   _thrown{ false };
 		std::vector<Event>     _events;
+		std::vector<Contact>   _contacts;
+		std::array<double, kPins> _lastWallHit{};
 	};
 }

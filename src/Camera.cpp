@@ -1,8 +1,10 @@
 // The bowling camera: the game's own free camera ("tfc"), moved by us.
 //
-// While you aim it sits behind the ball at the foul line; the mouse turns it left and right (that's your aim, within a
-// few degrees of straight), and holding the left button freezes it while mouse pulls become power. Once the ball's
-// thrown it rolls along behind it, stops part way down the lane, and watches the pins fall.
+// While you aim it sits still behind the ball at the foul line, looking straight down the lane: sideways mouse movement
+// turns the aim (the green guide line), not the view; with the left button held the mouse is the swing: pulling back
+// is power and sideways is spin. Once
+// the ball's thrown it rolls along behind it, stops part way down the lane, and watches the pins fall. The mouse never
+// turns it.
 
 #include "Game.h"
 
@@ -194,18 +196,25 @@ namespace fb
 		if (!a_event || _phase == Phase::kNone || !_inCamera) {
 			return false;
 		}
-		if (!_charging) {
-			// rolling and watching: the camera's ours, the mouse doesn't turn it
-			return _phase != Phase::kAiming && _phase != Phase::kPickup;
-		}
-		// the same event can reach both handlers; count it once
+		// the camera's ours all game: the mouse never turns it. While aiming, sideways movement is the aim; with the
+		// button held, pulling back is power
+		const bool aiming = _phase == Phase::kAiming || _phase == Phase::kPickup;
+		// (the same event can reach both handlers; count it once)
 		const bool repeat = a_event == _lastMouseEvent && a_event->timeCode == _lastMouseTime;
 		_lastMouseEvent = a_event;
 		_lastMouseTime = a_event->timeCode;
-		if (!repeat) {
+		if (!repeat && aiming) {
 			const auto& s = Settings::Get();
-			const float pull = static_cast<float>(a_event->mouseInputY) * s.pullPerCount * (s.invertPull ? -1.0f : 1.0f);
-			_power = std::clamp(_power.load() + pull, 0.0f, 1.0f);
+			if (_charging) {
+				// the swing: pulling back is power, sideways is spin (left hooks left)
+				const float pull = static_cast<float>(a_event->mouseInputY) * s.pullPerCount * (s.invertPull ? -1.0f : 1.0f);
+				_power = std::clamp(_power.load() + pull, 0.0f, 1.0f);
+				_swingHook = std::clamp(_swingHook - static_cast<float>(a_event->mouseInputX) * s.spinPerCount, -200.0f, 200.0f);
+			} else {
+				// mouse right: aim to the right, which is towards the lane frame's -y
+				const float maxAim = s.maxAim * kDegToRad;
+				_aimAngle = std::clamp(_aimAngle - static_cast<float>(a_event->mouseInputX) * s.aimPerCount * kDegToRad, -maxAim, maxAim);
+			}
 		}
 		return true;
 	}
@@ -214,10 +223,6 @@ namespace fb
 	{
 		if (!_inCamera || !a_free || _phase == Phase::kNone) {
 			return;
-		}
-		const bool aiming = (_phase == Phase::kAiming || _phase == Phase::kPickup) && !_charging;
-		if (aiming) {
-			return;  // the mouse turns the view: that's the aim
 		}
 		// nothing turns the view but us
 		if (auto* camera = a_free->camera) {
@@ -270,14 +275,9 @@ namespace fb
 		float yaw = 0.0f;
 		float pitch = 0.0f;
 		if (_phase == Phase::kAiming || _phase == Phase::kPickup) {
-			// the aim: the heading the mouse gave it, kept within a few degrees of straight down the lane (and held
-			// still while charging)
-			const float maxAim = s.maxAim * kDegToRad;
-			yaw = _charging ? _aimYaw : Component(a_free, _yawIndex);
-			const float off = std::clamp(util::AngleDiff(yaw, lanes::kDownLaneYaw), -maxAim, maxAim);
-			yaw = lanes::kDownLaneYaw + off;
+			// behind the ball, looking straight down the lane (the aim is the guide line's, not the view's)
+			yaw = lanes::kDownLaneYaw;
 			_aimYaw = yaw;
-			_aimAngle = -off;  // (turning the heading towards +x world is to the bowler's right)
 			pitch = s.camPitch * kDegToRad;
 			const RE::NiPoint3 fwd{ std::sin(yaw), std::cos(yaw), 0.0f };
 			const RE::NiPoint3 goal = HeldPoint() - fwd * s.camDistance + RE::NiPoint3{ 0.0f, 0.0f, s.camHeight };

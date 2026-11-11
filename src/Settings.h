@@ -20,23 +20,34 @@ namespace fb
 		static std::string Key(int a_vk);
 
 		// [Keys] Windows virtual-key codes (0 = off). Starting a game is the game's own activate key, at a ball return.
-		int   keyLeft{ VK_LEFT };    // move along the foul line (held), or fewer players at the ball return
-		int   keyRight{ VK_RIGHT };
-		int   keyHookLeft{ VK_UP };     // more hook to the left (for a right-hander: the usual hook)
-		int   keyHookRight{ VK_DOWN };  // more hook to the right
-		int   keyQuit{ 0x58 };       // X, twice: stop the game
+		int   keyLeft{ 'A' };         // move along the foul line to your left (held)
+		int   keyRight{ 'D' };        // ...to your right
+		int   keyHookLeft{ 'W' };     // more hook to the left (a right-hander's hook)
+		int   keyHookRight{ 'S' };    // more hook to the right
+		int   keyFewer{ VK_LEFT };    // at the ball return: fewer players
+		int   keyMore{ VK_RIGHT };    // ...more
+		int   keyQuit{ 0x58 };        // X, twice: stop the game
 		float activateDistance{ 240.0f };  // how close to a ball return F works
 
-		// [Throw] hold the left mouse button, pull the mouse back for power, let go to throw
+		// [Throw] the mouse aims (the camera stays put); hold the left button, pull back for power, let go to throw
 		float minSpeed{ 300.0f };      // the ball's speed at the least power, units per second
 		float maxSpeed{ 820.0f };      // ...and at full power
 		float pullPerCount{ 0.002f };  // power per count of mouse pull (500 counts: full)
 		bool  invertPull{ false };     // pushing forward gives power instead
-		float revs{ 30.0f };           // spin, radians per second (about 290 rpm)
-		float maxHook{ 60.0f };        // degrees the spin axis can be turned
-		float hookStep{ 5.0f };        // degrees per press of the hook keys
-		float moveSpeed{ 60.0f };      // how fast the arrow keys move you along the foul line, units per second
+		float aimPerCount{ 0.012f };   // degrees of aim per count of sideways mouse movement
 		float maxAim{ 6.0f };          // the most the throw can angle off straight, degrees
+		float revs{ 65.0f };           // spin, radians per second (about 620 rpm): the more, the more it can hook
+		float maxHook{ 50.0f };        // how far full hook turns the spin axis sideways, degrees
+		float hookStep{ 10.0f };       // percent of full hook per press of the hook keys
+		float spinPerCount{ 0.25f };   // percent of full hook per count of sideways mouse movement during the swing (0 = off)
+		float moveSpeed{ 60.0f };      // how fast you move along the foul line, units per second
+		float inaccuracy{ 1.0f };      // how much each throw strays from what you set up (0 = never; harder throws stray more)
+		float laneDrift{ 1.0f };       // how much the lane itself drifts a ball left or right, a little differently each time (0 = never)
+
+		// [Guide] the green line from the ball, along your aim
+		bool  guide{ true };
+		float guideLength{ 420.0f };   // how far down the lane it goes
+		bool  guideFlipY{ true };      // (if the line shows up mirrored top to bottom, set 0)
 
 		// [Camera]
 		float camDistance{ 95.0f };   // behind the ball while you aim
@@ -63,5 +74,6 @@ namespace fb
 
 		// [Physics] everything about the lane, ball and pins
 		bowl::Spec spec;
+		float      pinJitter{ 0.3f };  // how far off its spot the pinsetter may put a pin
 	};
 }

@@ -19,7 +19,7 @@ namespace fb
 		constexpr float  kMaxFrame = 0.05f;        // longer frames (hitches) are clamped
 		constexpr float  kPickupSeconds = 0.6f;    // the ball off the return and into your hand
 		constexpr float  kResultSeconds = 1.8f;    // what a ball did stays up this long before the next one
-		constexpr float  kOverSeconds = 6.0f;      // the final scores, then the game packs itself away
+		constexpr float  kOverSeconds = 3.0f;      // the final scores, then the game packs itself away
 		constexpr float  kReturnDelay = 1.6f;      // a thrown ball spends this long in the machine before it comes back
 		constexpr float  kQuitWindow = 3.0f;       // the quit key twice within this many seconds stops the game
 		constexpr double kPi = 3.14159265358979323846;
@@ -153,6 +153,7 @@ namespace fb
 			DrawPins();
 			DrawBalls(paused ? 0.0f : dt);
 			UpdateCameraGoal(paused ? 0.0f : dt);
+			UpdateGuide();
 		}
 
 		// what the HUD shows
@@ -174,8 +175,8 @@ namespace fb
 			}
 			h.bowler = _match.Bowler();
 			h.aiming = _phase == Phase::kAiming || _phase == Phase::kPickup;
-			h.hook = _hook;
-			h.maxHook = s.maxHook;
+			h.hook = HookNow();
+			h.maxHook = 100.0f;  // (the hook's a percentage of full)
 			// 39 boards across the lane, counted from the right gutter
 			const double half = s.spec.laneHalfWidth;
 			h.board = std::clamp(static_cast<int>(std::floor((_releaseY + half) / (2.0 * half) * 39.0)) + 1, 1, 39);
@@ -183,7 +184,8 @@ namespace fb
 			h.bannerSub = _bannerSub;
 			h.bannerAlpha = _bannerLength > 0.0f ? std::clamp(std::min(_bannerTime, _bannerLength - _bannerTime) * 4.0f, 0.0f, 1.0f) : 0.0f;
 			h.over = _phase == Phase::kOver;
-			h.keys = std::format("{}/{}: MOVE   {}/{}: HOOK   HOLD LEFT MOUSE + PULL BACK: THROW   {} TWICE: QUIT",
+			h.guide = _guide;
+			h.keys = std::format("MOUSE: AIM   {}/{}: MOVE   {}/{}: SPIN   HOLD LEFT MOUSE: PULL BACK FOR POWER, SIDEWAYS FOR SPIN   {} TWICE: QUIT",
 				util::Upper(Settings::Key(s.keyLeft)), util::Upper(Settings::Key(s.keyRight)), util::Upper(Settings::Key(s.keyHookLeft)),
 				util::Upper(Settings::Key(s.keyHookRight)), util::Upper(Settings::Key(s.keyQuit)));
 		}
@@ -195,9 +197,9 @@ namespace fb
 	{
 		const auto& s = Settings::Get();
 		const bool  focus = util::GameHasFocus();
-		const std::array<int, 5> keys{ s.keyLeft, s.keyRight, s.keyHookLeft, s.keyHookRight, s.keyQuit };
-		std::array<bool, 5>      down{};
-		std::array<bool, 5>      pressed{};
+		const std::array<int, 7> keys{ s.keyLeft, s.keyRight, s.keyHookLeft, s.keyHookRight, s.keyQuit, s.keyFewer, s.keyMore };
+		std::array<bool, 7>      down{};
+		std::array<bool, 7>      pressed{};
 		for (std::size_t i = 0; i < keys.size(); ++i) {
 			down[i] = focus && util::KeyDown(keys[i]);
 			pressed[i] = down[i] && !_keyWasDown[i];
@@ -212,10 +214,10 @@ namespace fb
 		_lmbWasDown = lmb;
 
 		if (_phase == Phase::kNone) {
-			// at a ball return: left/right picks how many play, F starts
+			// at a ball return: the arrows pick how many play, F starts
 			if (_lookLane) {
-				if (pressed[0] || pressed[1]) {
-					_players = std::clamp(_players + (pressed[1] ? 1 : -1), 1, 4);
+				if (pressed[5] || pressed[6]) {
+					_players = std::clamp(_players + (pressed[6] ? 1 : -1), 1, 4);
 					_lookTime = {};  // (the prompt shows it at once)
 				}
 				if (activatePressed) {
@@ -250,13 +252,13 @@ namespace fb
 		if (down[2] != down[3]) {
 			const float dir = down[2] ? 1.0f : -1.0f;
 			if (pressed[2] || pressed[3]) {
-				_hook = std::clamp(_hook + dir * s.hookStep, -s.maxHook, s.maxHook);
+				_hook = std::clamp(_hook + dir * s.hookStep, -100.0f, 100.0f);
 				_hookRepeat = -0.35f;
 			} else {
 				_hookRepeat += a_dt;
 				if (_hookRepeat >= 0.08f) {
 					_hookRepeat = 0.0f;
-					_hook = std::clamp(_hook + dir * s.hookStep, -s.maxHook, s.maxHook);
+					_hook = std::clamp(_hook + dir * s.hookStep, -100.0f, 100.0f);
 				}
 			}
 		}
@@ -264,6 +266,7 @@ namespace fb
 		if (_phase == Phase::kAiming) {
 			if (lmbPressed) {
 				_power = 0.0f;
+				_swingHook = 0.0f;
 				_charging = true;
 			} else if (lmbReleased && _charging) {
 				_charging = false;
@@ -411,7 +414,7 @@ namespace fb
 		}
 
 		_sim = std::make_unique<bowl::Sim>(s.spec);
-		_sim->Rack();
+		_sim->Rack(s.pinJitter, _rng());
 		_match = bowl::Match(a_players);
 		_names.clear();
 		const char* own = player->GetDisplayFullName();
@@ -500,15 +503,37 @@ namespace fb
 		r.angle = _aimAngle;
 		r.speed = s.minSpeed + (s.maxSpeed - s.minSpeed) * std::pow(power, 1.3f);
 		r.revs = s.revs;
-		r.axis = _hook * kPi / 180.0;
+		const float hook = HookNow();
+		r.axis = hook / 100.0 * s.maxHook * kPi / 180.0;
+		// nobody throws exactly what they meant to: a little off in line, pace, spin and where it leaves the hand,
+		// and more of it the harder the throw
+		if (s.inaccuracy > 0.0f) {
+			std::normal_distribution<double> n(0.0, 1.0);
+			const double k = s.inaccuracy * (0.5 + power);
+			r.angle += n(_rng) * 0.08 * kPi / 180.0 * k;
+			r.speed *= 1.0 + n(_rng) * 0.008 * k;
+			r.revs *= 1.0 + n(_rng) * 0.03 * k;
+			r.axis += n(_rng) * 1.0 * kPi / 180.0 * k;
+			r.y += n(_rng) * 0.25 * k;
+		}
+		// and the lane's never quite the same twice: a little drift left or right on the way down
+		if (s.laneDrift > 0.0f) {
+			std::normal_distribution<double>       n(0.0, 1.0);
+			std::uniform_real_distribution<double> phase(0.0, 2.0 * kPi);
+			r.drift = n(_rng) * 6.0 * s.laneDrift;
+			r.driftWave = n(_rng) * 12.0 * s.laneDrift;
+			r.driftPhase = phase(_rng);
+		}
+		_lastPower = power;
 		_sim->Throw(r);
 		_balls[static_cast<std::size_t>(_active)].at = BallAt::kLane;
 		_lastBallGutter = false;
 		_phase = Phase::kRolling;
 		_phaseTime = 0.0f;
 		_quitArmed = false;
-		log::info("throw: board {} angle {:.2f} deg, power {:.0f}% = {:.0f} u/s, hook {:.0f} deg", _hud.board, r.angle * 180.0 / kPi,
-			power * 100.0f, r.speed, _hook);
+		log::info("throw: board {} angle {:.2f} deg, power {:.0f}% = {:.0f} u/s, hook {:.0f}% (axis {:.1f} deg, {:.0f} rad/s)", _hud.board,
+			r.angle * 180.0 / kPi, power * 100.0f, r.speed, hook, r.axis * 180.0 / kPi, r.revs);
+		_swingHook = 0.0f;
 	}
 
 	void Game::BallSettled()
@@ -568,7 +593,7 @@ namespace fb
 		}
 		const auto& card = _match.CardOf(_match.Bowler());
 		if (card.FreshRack()) {
-			_sim->Rack();
+			_sim->Rack(Settings::Get().pinJitter, _rng());
 		} else {
 			_sim->Sweep();
 		}
@@ -595,6 +620,36 @@ namespace fb
 		if (card.FreshRack() && card.BallInFrame() == 0) {
 			const std::string who = _names.size() > 1 ? _names[static_cast<std::size_t>(_match.Bowler())] + "  ·  " : std::string();
 			Banner(std::format("FRAME {}", card.Frame() + 1), who + std::format("{}", card.Total()), 1.4f);
+		}
+	}
+
+	void Game::UpdateGuide()
+	{
+		// the green line: from the ball, straight along your aim, as screen points (0..1). It shows the line you're
+		// starting the ball on, not where the hook takes it
+		_guide.clear();
+		const auto& s = Settings::Get();
+		auto*       camera = RE::Main::WorldRootCamera();
+		if (!s.guide || _phase != Phase::kAiming || !_lane || !_sim || !camera) {
+			return;
+		}
+		const auto&  spec = _sim->GetSpec();
+		const double dx = std::cos(_aimAngle);
+		const double dy = std::sin(_aimAngle);
+		constexpr int kSteps = 24;
+		for (int i = 0; i <= kSteps; ++i) {
+			const double t = s.guideLength * i / kSteps;
+			const double x = spec.ballRadius + 2.0 + t * dx;
+			const double y = _releaseY + t * dy;
+			if (std::abs(y) > spec.laneHalfWidth) {
+				break;  // (off the edge: the gutter)
+			}
+			const auto world = lanes::ToWorld(*_lane, x, y, 0.6);
+			float      sx = 0.0f, sy = 0.0f, sz = 0.0f;
+			if (!camera->WorldPtToScreenPt3(world, sx, sy, sz, 1e-5f) || sz <= 0.0f) {
+				continue;  // (behind the camera)
+			}
+			_guide.push_back({ sx, s.guideFlipY ? 1.0f - sy : sy });
 		}
 	}
 
@@ -777,7 +832,6 @@ namespace fb
 		if (!_sim || !_lane) {
 			return;
 		}
-		const auto& spec = _sim->GetSpec();
 		for (int i = 0; i < bowl::Sim::kPins; ++i) {
 			auto ref = _pins[static_cast<std::size_t>(i)].get();
 			if (!ref) {
@@ -785,30 +839,18 @@ namespace fb
 			}
 			Prepare(ref.get(), _pinPrepared[static_cast<std::size_t>(i)]);
 			const auto& p = _sim->Pins()[static_cast<std::size_t>(i)];
-			bool        hidden = p.state == bowl::PinState::kSwept;
-			double      tilt = p.tilt;
-			double      z = p.z;
-			if (p.state == bowl::PinState::kGone) {
-				if (p.pos.x > spec.deckEnd || std::abs(p.pos.y) <= spec.laneHalfWidth) {
-					hidden = p.z < -50.0;  // (into the pit: gone once it's dropped out of sight)
-				} else {
-					tilt = kPi * 0.5;  // in a gutter: lying in it
-					z = std::max(p.z, -spec.gutterDepth);
-				}
-			}
-			// the pin's own frame: tipped by tilt towards tiltDir, turned about its axis by yaw
-			const double lift = spec.pinRadius * std::sin(tilt) * std::sin(tilt);
-			double       tip[3][3], turn[3][3], lane[3][3], world[3][3];
-			util::AxisAngle(-p.tiltDir.y, p.tiltDir.x, 0.0, tilt, tip);
-			util::AxisAngle(0.0, 0.0, 1.0, p.yaw, turn);
-			util::Multiply(tip, turn, lane);
+			// swept away, or down at the bottom of the pit: out of sight
+			const bool hidden = p.state == bowl::PinState::kSwept || p.frozen;
+			bowl::Vec3 base;
+			double     lane[3][3], world[3][3];
+			_sim->PinPose(i, base, lane);
 			for (int r = 0; r < 3; ++r) {
 				const double flip = r < 2 ? -1.0 : 1.0;  // the lane frame is the world turned half round
 				for (int c = 0; c < 3; ++c) {
 					world[r][c] = flip * lane[r][c];
 				}
 			}
-			PlaceNode(ref.get(), lanes::ToWorld(*_lane, p.pos.x, p.pos.y, z + lift), util::NodeRotation(world), hidden);
+			PlaceNode(ref.get(), lanes::ToWorld(*_lane, base.x, base.y, base.z), util::NodeRotation(world), hidden);
 		}
 	}
 

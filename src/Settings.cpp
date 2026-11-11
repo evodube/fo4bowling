@@ -66,6 +66,8 @@ namespace fb
 		keyRight = ReadKey(L"iRight", keyRight);
 		keyHookLeft = ReadKey(L"iHookLeft", keyHookLeft);
 		keyHookRight = ReadKey(L"iHookRight", keyHookRight);
+		keyFewer = ReadKey(L"iFewerPlayers", keyFewer);
+		keyMore = ReadKey(L"iMorePlayers", keyMore);
 		keyQuit = ReadKey(L"iQuit", keyQuit);
 		activateDistance = std::clamp(ReadFloat(L"Keys", L"fActivateDistance", activateDistance), 60.0f, 600.0f);
 
@@ -73,11 +75,19 @@ namespace fb
 		maxSpeed = std::max(minSpeed + 1.0f, ReadFloat(L"Throw", L"fMaxSpeed", maxSpeed));
 		pullPerCount = std::clamp(ReadFloat(L"Throw", L"fPullPerCount", pullPerCount), 0.0001f, 0.1f);
 		invertPull = ReadBool(L"Throw", L"bInvertPull", invertPull);
-		revs = std::clamp(ReadFloat(L"Throw", L"fRevs", revs), 0.0f, 80.0f);
-		maxHook = std::clamp(ReadFloat(L"Throw", L"fMaxHook", maxHook), 0.0f, 89.0f);
-		hookStep = std::clamp(ReadFloat(L"Throw", L"fHookStep", hookStep), 0.5f, 30.0f);
-		moveSpeed = std::clamp(ReadFloat(L"Throw", L"fMoveSpeed", moveSpeed), 5.0f, 400.0f);
+		aimPerCount = std::clamp(ReadFloat(L"Throw", L"fAimPerCount", aimPerCount), 0.0005f, 1.0f);
 		maxAim = std::clamp(ReadFloat(L"Throw", L"fMaxAim", maxAim), 0.0f, 20.0f);
+		revs = std::clamp(ReadFloat(L"Throw", L"fRevs", revs), 0.0f, 150.0f);
+		maxHook = std::clamp(ReadFloat(L"Throw", L"fMaxHook", maxHook), 0.0f, 89.0f);
+		hookStep = std::clamp(ReadFloat(L"Throw", L"fHookStep", hookStep), 1.0f, 50.0f);
+		spinPerCount = std::clamp(ReadFloat(L"Throw", L"fSpinPerCount", spinPerCount), 0.0f, 10.0f);
+		moveSpeed = std::clamp(ReadFloat(L"Throw", L"fMoveSpeed", moveSpeed), 5.0f, 400.0f);
+		inaccuracy = std::clamp(ReadFloat(L"Throw", L"fInaccuracy", inaccuracy), 0.0f, 10.0f);
+		laneDrift = std::clamp(ReadFloat(L"Throw", L"fLaneDrift", laneDrift), 0.0f, 10.0f);
+
+		guide = ReadBool(L"Guide", L"bEnabled", guide);
+		guideLength = std::clamp(ReadFloat(L"Guide", L"fLength", guideLength), 20.0f, 2000.0f);
+		guideFlipY = ReadBool(L"Guide", L"bFlipY", guideFlipY);
 
 		camDistance = std::clamp(ReadFloat(L"Camera", L"fDistance", camDistance), 20.0f, 400.0f);
 		camHeight = std::clamp(ReadFloat(L"Camera", L"fHeight", camHeight), 0.0f, 200.0f);
@@ -115,9 +125,10 @@ namespace fb
 		s.pinRestitution = ReadDouble(L"Physics", L"fPinRestitution", s.pinRestitution);
 		s.pinPinRestitution = ReadDouble(L"Physics", L"fPinPinRestitution", s.pinPinRestitution);
 		s.pinSlideFriction = ReadDouble(L"Physics", L"fPinSlideFriction", s.pinSlideFriction);
+		pinJitter = std::clamp(ReadFloat(L"Physics", L"fPinJitter", pinJitter), 0.0f, 5.0f);
 
-		log::info("settings: throw {:.0f}-{:.0f}, revs {:.0f}, hook up to {:.0f} deg | lane offset ({:.1f}, {:.1f}, {:.1f}) | head pin {:.0f}, oil {:.0f}",
-			minSpeed, maxSpeed, revs, maxHook, laneOffsetX, laneOffsetY, laneOffsetZ, s.headPin, s.oilLength);
+		log::info("settings: throw {:.0f}-{:.0f}, revs {:.0f}, hook up to {:.0f} deg, inaccuracy {:.2f} | lane offset ({:.1f}, {:.1f}, {:.1f}) | head pin {:.0f}, oil {:.0f}",
+			minSpeed, maxSpeed, revs, maxHook, inaccuracy, laneOffsetX, laneOffsetY, laneOffsetZ, s.headPin, s.oilLength);
 	}
 
 	std::string Settings::Key(int a_vk)

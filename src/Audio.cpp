@@ -99,6 +99,8 @@ namespace fb::Audio
 			case Bank::kCrash: return L"crash";
 			case Bank::kHit: return L"hit";
 			case Bank::kPin: return L"pin";
+			case Bank::kMachine: return L"machine";
+			case Bank::kSet: return L"set";
 			default: return L"";
 			}
 		}
@@ -111,6 +113,8 @@ namespace fb::Audio
 			case Bank::kCrash: return 6;
 			case Bank::kHit: return 6;
 			case Bank::kPin: return 4;
+			case Bank::kMachine: return 1;
+			case Bank::kSet: return 2;
 			default: return 0;
 			}
 		}

@@ -15,6 +15,8 @@
 
 #include "Game.h"
 
+#include "Audio.h"
+
 #include "Settings.h"
 #include "Util.h"
 
@@ -215,6 +217,26 @@ namespace fb
 		}
 		_phase = Phase::kSetting;
 		_phaseTime = 0.0f;
+	}
+
+	void Game::SettingSounds(float a_from, float a_to)
+	{
+		// the machine (YleArkisto's recording of a real one): it runs as the cycle starts, and clunks as the deck sets
+		// the pins down. [Sound] bPinsetter turns it off
+		const auto& cfg = Settings::Get();
+		if (!cfg.pinsetterSound) {
+			return;
+		}
+		const auto&  spec = _sim->GetSpec();
+		const Plan   plan = MakePlan(_setFresh, spec, cfg);
+		const auto   crossed = [&](double a_t) { return a_t >= 0.0 && a_from < a_t && a_to >= a_t; };
+		const auto   at = lanes::ToWorld(*_lane, spec.headPin + spec.pinSpacing * 1.3, 0.0, 60.0);
+		if (crossed(0.01)) {
+			Audio::Play(Audio::Bank::kMachine, at, 0.35f);
+		}
+		if (crossed((_setFresh ? plan.newTo : plan.holdTo) - 0.04)) {
+			Audio::Play(Audio::Bank::kSet, at, 0.45f);
+		}
 	}
 
 	float Game::SweepTakesBall() const

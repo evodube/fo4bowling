@@ -159,6 +159,7 @@ namespace fb
 		bool  MachineOn() const;
 		void  StartSetting();  // does the sim's sweep or rack, then shows the machine doing it
 		float SettingLength() const;
+		void  SettingSounds(float a_from, float a_to);  // (what the machine does between those two times)
 		float SweepTakesBall() const;  // (when, in the machine's cycle, the sweep has the thrown ball)
 		bool  SettingPinPose(int a_pin, bowl::Vec3& a_base, double a_rot[3][3]) const;  // false: out of sight
 		void  DrawMachine();

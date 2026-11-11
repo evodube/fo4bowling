@@ -69,6 +69,7 @@ namespace fb
 		// [Sound] real alley recordings, positioned where they happen
 		bool  sound{ true };
 		float soundVolume{ 0.8f };
+		bool  pinsetterSound{ true };  // the pinsetter's machine noise
 		float soundFullDistance{ 300.0f };  // full volume within this far of the camera...
 		float soundMaxDistance{ 3500.0f };  // ...fading to nothing here
 

@@ -23,8 +23,3 @@ are a pin knock layered with a pin-on-pin clack or two.
   pin_*
       "bowling pins mono" by Bruce Burbank
       https://freesound.org/people/Bruce%20Burbank/sounds/151203/
-  sweep_*   "Mechanical1" by BMacZero, with the pin knocks
-      https://freesound.org/people/BMacZero/sounds/94120/
-  set_*     "LightClunk1" and "LightClunk2" by BMacZero, with the pin knocks above
-      https://freesound.org/people/BMacZero/sounds/94129/
-      https://freesound.org/people/BMacZero/sounds/94130/

@@ -15,8 +15,6 @@
 
 #include "Game.h"
 
-#include "Audio.h"
-
 #include "Settings.h"
 #include "Util.h"
 
@@ -215,26 +213,6 @@ namespace fb
 		}
 		_phase = Phase::kSetting;
 		_phaseTime = 0.0f;
-	}
-
-	void Game::SettingSounds(float a_from, float a_to)
-	{
-		// the machine's sounds, as its moves start: the sweep (its clank and the slide back), and the deck reaching
-		// the deck (picking the standing pins up, and setting them or a new rack down)
-		const auto& spec = _sim->GetSpec();
-		const Plan  plan = MakePlan(_setFresh, spec, Settings::Get());
-		const auto  crossed = [&](double a_t) { return a_t >= 0.0 && a_from < a_t && a_to >= a_t; };
-		const double rackMiddle = spec.headPin + spec.pinSpacing * 1.3;
-		const auto   at = lanes::ToWorld(*_lane, rackMiddle, 0.0, 20.0);
-		if (crossed(plan.pushFrom - 0.08)) {
-			Audio::Play(Audio::Bank::kSweep, lanes::ToWorld(*_lane, spec.kickbackStart + 30.0, 0.0, 10.0), 0.75f);
-		}
-		if (!_setFresh && crossed(plan.holdFrom - 0.1)) {
-			Audio::Play(Audio::Bank::kSet, at, 0.45f, 1.1f);  // (the standing pins taken up)
-		}
-		if (crossed((_setFresh ? plan.newTo : plan.holdTo) - 0.05)) {
-			Audio::Play(Audio::Bank::kSet, at, 0.8f);  // (and set down)
-		}
 	}
 
 	float Game::SettingLength() const

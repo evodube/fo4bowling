@@ -1,3 +1,4 @@
+#include "Lanes.h"
 #include "Audio.h"
 #include "CameraHook.h"
 #include "Game.h"
@@ -23,6 +24,10 @@ namespace
 		case F4SE::MessagingInterface::kGameDataReady:
 			fb::log::info("game data ready");
 			fb::Settings::Get().Load();
+			fb::lanes::Resolve();
+			for (const auto& lane : fb::lanes::kLanes) {
+				fb::log::info("lane {} at {}: {}", lane.number, lane.alley, lane.present ? "playable" : "its master isn't loaded");
+			}
 			fb::Hook::Install();
 			fb::CameraHook::Install();
 			fb::Audio::Init();

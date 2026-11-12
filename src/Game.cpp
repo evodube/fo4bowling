@@ -396,7 +396,7 @@ namespace fb
 		auto* player = RE::PlayerCharacter::GetSingleton();
 		auto* camera = RE::PlayerCamera::GetSingleton();
 		auto* cell = player ? player->GetParentCell() : nullptr;
-		if (!cell || cell->GetFormID() != lanes::kCell || !camera || !camera->cameraRoot || player->IsInCombat()) {
+		if (!lanes::IsAlley(cell) || !camera || !camera->cameraRoot || player->IsInCombat()) {
 			return nullptr;
 		}
 		const auto&        s = Settings::Get();
@@ -407,7 +407,7 @@ namespace fb
 		const lanes::Lane* best = nullptr;
 		float              bestT = std::numeric_limits<float>::max();
 		for (const auto& lane : lanes::kLanes) {
-			auto* ret = Ref(lane.ballReturn);
+			auto* ret = lane.present && lane.cell == cell->GetFormID() ? Ref(lane.ballReturn) : nullptr;
 			if (!ret || ret->IsDisabled() || ret->GetParentCell() != cell) {
 				continue;
 			}
@@ -446,7 +446,7 @@ namespace fb
 	{
 		auto* player = RE::PlayerCharacter::GetSingleton();
 		auto* cell = player ? player->GetParentCell() : nullptr;
-		return cell && cell->GetFormID() == lanes::kCell && !player->IsDead(false) && !player->IsInCombat();
+		return cell && _lane && cell->GetFormID() == _lane->cell && !player->IsDead(false) && !player->IsInCombat();
 	}
 
 	void Game::Say(const std::string& a_message)
@@ -525,6 +525,7 @@ namespace fb
 		{
 			auto spec = s.spec;
 			spec.returnSide = s.gutterReturn ? ReturnSide(a_lane) : 0.0;  // (off the back wall, the ball heads for the return's side)
+			spec.pitBack += a_lane.backWall;  // (where this alley's own back wall is)
 			_sim = std::make_unique<bowl::Sim>(spec);
 		}
 		_sim->Rack(s.pinJitter, _rng());
@@ -567,7 +568,7 @@ namespace fb
 		_balls[1].target = s.returnSpot1;  // the other one rolls up behind it
 		EnterCamera();
 		BlockControls(true);
-		log::info("game on lane {}: {}", a_lane.number, a_mode.label);
+		log::info("game on lane {} at {}: {}", a_lane.number, a_lane.alley, a_mode.label);
 	}
 
 	void Game::HoldOpponents(bool a_hold)
@@ -1182,6 +1183,11 @@ namespace fb
 		for (const auto id : a_lane.pins) {
 			hide(Ref(id));
 		}
+		for (const auto id : a_lane.strays) {
+			if (id) {
+				hide(Ref(id));
+			}
+		}
 		auto* player = RE::PlayerCharacter::GetSingleton();
 		auto* cell = player ? player->GetParentCell() : nullptr;
 		if (!cell) {
@@ -1255,7 +1261,7 @@ namespace fb
 		// two balls on each lane's return while you're in the alley and no game's on that lane
 		auto* player = RE::PlayerCharacter::GetSingleton();
 		auto* cell = player ? player->GetParentCell() : nullptr;
-		if (!cell || cell->GetFormID() != lanes::kCell) {
+		if (!lanes::IsAlley(cell)) {
 			RemoveDisplay(-1);
 			return;
 		}
@@ -1266,6 +1272,10 @@ namespace fb
 			auto&       d = _display[static_cast<std::size_t>(l)];
 			if (_phase != Phase::kNone && _lane == &lane) {
 				RemoveDisplay(l);  // (the game's own two are there)
+				continue;
+			}
+			if (!lane.present || lane.cell != cell->GetFormID()) {
+				RemoveDisplay(l);  // (another alley's)
 				continue;
 			}
 			if (!ballBase || !Ref(lane.ballReturn)) {

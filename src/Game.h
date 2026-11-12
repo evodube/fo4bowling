@@ -103,7 +103,7 @@ namespace fb
 		};
 		void UpdateDisplay();
 		void RemoveDisplay(int a_lane);  // (-1: both)
-		std::array<Display, 2> _display;
+		std::array<Display, lanes::kLanes.size()> _display;
 
 		// ------------------------------------------------ main thread
 		void Tick();

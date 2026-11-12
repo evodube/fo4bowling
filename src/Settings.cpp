@@ -79,6 +79,11 @@ namespace fb
 		::WritePrivateProfileStringW(L"Pinsetter", L"fLightBrightness", std::format(L"{:.2f}", pinLightBrightness).c_str(), kIniPath);
 		::WritePrivateProfileStringW(L"Guide", L"bEnabled", guide ? L"1" : L"0", kIniPath);
 		::WritePrivateProfileStringW(L"Return", L"bGutterReturn", gutterReturn ? L"1" : L"0", kIniPath);
+		::WritePrivateProfileStringW(L"Controller", L"bEnabled", controller ? L"1" : L"0", kIniPath);
+		::WritePrivateProfileStringW(L"Controller", L"bRumble", rumble ? L"1" : L"0", kIniPath);
+		::WritePrivateProfileStringW(L"Controller", L"fAimSpeed", std::format(L"{:.2f}", padAimSpeed).c_str(), kIniPath);
+		::WritePrivateProfileStringW(L"Controller", L"fPowerSpeed", std::format(L"{:.2f}", padPowerSpeed).c_str(), kIniPath);
+		::WritePrivateProfileStringW(L"Controller", L"bInvertPull", padInvertPull ? L"1" : L"0", kIniPath);
 	}
 
 	void Settings::Load()
@@ -89,6 +94,14 @@ namespace fb
 		keyMore = ReadKey(L"iMorePlayers", keyMore);
 		keyQuit = ReadKey(L"iQuit", keyQuit);
 		activateDistance = std::clamp(ReadFloat(L"Keys", L"fActivateDistance", activateDistance), 60.0f, 600.0f);
+
+		controller = ReadBool(L"Controller", L"bEnabled", controller);
+		padAimSpeed = std::clamp(ReadFloat(L"Controller", L"fAimSpeed", padAimSpeed), 0.2f, 40.0f);
+		padPowerSpeed = std::clamp(ReadFloat(L"Controller", L"fPowerSpeed", padPowerSpeed), 0.1f, 10.0f);
+		padSpinSpeed = std::clamp(ReadFloat(L"Controller", L"fSpinSpeed", padSpinSpeed), 0.0f, 2000.0f);
+		padDeadzone = std::clamp(ReadFloat(L"Controller", L"fDeadzone", padDeadzone), 0.0f, 0.9f);
+		padInvertPull = ReadBool(L"Controller", L"bInvertPull", padInvertPull);
+		rumble = ReadBool(L"Controller", L"bRumble", rumble);
 
 		minSpeed = std::max(50.0f, ReadFloat(L"Throw", L"fMinSpeed", minSpeed));
 		maxSpeed = std::max(minSpeed + 1.0f, ReadFloat(L"Throw", L"fMaxSpeed", maxSpeed));

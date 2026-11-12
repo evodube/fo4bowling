@@ -251,6 +251,10 @@ namespace fb
 		int                                      _activateVk{ 0x46 };  // F, until the control map says otherwise
 		bool                                     _activateWasDown{ true };
 		bool                                     _lmbWasDown{ true };
+		std::uint16_t                            _padWas{ 0xFFFF };   // (nothing counts as pressed on the first frame)
+		bool                                     _rtWasDown{ true };
+		bool                                     _padSwing{ false };  // this swing's on the controller (RT), not the mouse
+		std::atomic<bool>                        _padActive{ false }; // the controller was used last: the HUD names its buttons
 		std::array<bool, 5>                      _keyWasDown{};
 		std::chrono::steady_clock::time_point    _quitAt{};
 		bool                                     _quitArmed{ false };

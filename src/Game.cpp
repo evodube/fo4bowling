@@ -10,6 +10,7 @@
 
 #include "Audio.h"
 #include "Hud.h"
+#include "Pad.h"
 #include "Settings.h"
 #include "Util.h"
 
@@ -92,6 +93,10 @@ namespace fb
 		_haveLastTick = true;
 
 		const bool paused = util::GamePaused();
+		if (paused) {
+			Pad::StopRumble();
+		}
+		Pad::Update(dt);
 		UpdateDisplay();
 		if (_phase == Phase::kNone) {
 			UpdateLook();
@@ -253,8 +258,11 @@ namespace fb
 			h.bannerAge = std::max(0.0f, _bannerLength - _bannerTime);
 			h.over = _phase == Phase::kOver;
 			h.guide = _guide;
+			const std::string quit = _padActive ? std::string("B") : util::Upper(Settings::Key(s.keyQuit));
 			if (AiTurn()) {
-				h.keys = std::format("{} IS BOWLING   {} TWICE: QUIT", _names[static_cast<std::size_t>(_match.Bowler())], util::Upper(Settings::Key(s.keyQuit)));
+				h.keys = std::format("{} IS BOWLING   {} TWICE: QUIT", _names[static_cast<std::size_t>(_match.Bowler())], quit);
+			} else if (_padActive) {
+				h.keys = "RIGHT STICK: AIM   LEFT STICK: MOVE   HOLD RT: PULL THE RIGHT STICK BACK FOR POWER, SIDEWAYS FOR SPIN   B TWICE: QUIT";
 			} else
 			{
 				h.keys = std::format("MOUSE: AIM   {}/{}: MOVE   HOLD LEFT MOUSE: PULL BACK FOR POWER, SIDEWAYS FOR SPIN   {} TWICE: QUIT",
@@ -284,6 +292,29 @@ namespace fb
 		const bool lmbPressed = lmb && !_lmbWasDown;
 		const bool lmbReleased = !lmb && _lmbWasDown;
 		_lmbWasDown = lmb;
+		if (lmbPressed || activatePressed || std::any_of(pressed.begin(), pressed.end(), [](bool a_b) { return a_b; })) {
+			_padActive = false;  // (the HUD names keys again)
+		}
+
+		// the controller, alongside: its buttons press the same things
+		const auto pad = s.controller && focus && !util::GamePaused() ? Pad::Poll(s.padDeadzone) : Pad::State{};
+		const auto padPressed = [&](std::uint16_t a_bit) { return (pad.buttons & a_bit) && !(_padWas & a_bit); };
+		const bool rt = pad.rt > (_rtWasDown ? 0.3f : 0.6f);  // (a little give, so a half-held trigger doesn't flicker)
+		const bool rtPressed = rt && !_rtWasDown;
+		const bool rtReleased = !rt && _rtWasDown;
+		_rtWasDown = rt;
+		const bool padA = padPressed(Pad::kA);
+		const bool padB = padPressed(Pad::kB);
+		const bool padFewer = padPressed(Pad::kLB) || padPressed(Pad::kLeft);
+		const bool padMore = padPressed(Pad::kRB) || padPressed(Pad::kRight);
+		_padWas = pad.buttons;
+		if (padA || padB || padFewer || padMore || rtPressed || pad.lx != 0.0f || pad.rx != 0.0f || pad.ry != 0.0f) {
+			_padActive = true;
+		}
+		const bool startPressed = activatePressed || padA;
+		pressed[2] = pressed[2] || padB;
+		pressed[3] = pressed[3] || padFewer;
+		pressed[4] = pressed[4] || padMore;
 
 		if (_phase == Phase::kNone) {
 			// at a ball return: the arrows pick how many play (you against the people nearby), F starts
@@ -293,7 +324,7 @@ namespace fb
 					_mode = ((_mode + (pressed[4] ? 1 : -1)) % n + n) % n;
 					_lookTime = {};  // (the prompt shows it at once)
 				}
-				if (activatePressed) {
+				if (startPressed) {
 					const auto& mode = _modes[static_cast<std::size_t>(std::clamp(_mode, 0, static_cast<int>(_modes.size()) - 1))];
 					if (mode.missing > 0) {
 						Say(std::format("Bowling: {} needs {} people nearby to play against", mode.label, mode.missing + mode.npcs.size()));
@@ -314,7 +345,7 @@ namespace fb
 			}
 			_quitArmed = true;
 			_quitAt = now;
-			Say(std::format("Bowling: press {} again to stop the game", Settings::Key(s.keyQuit)));
+			Say(std::format("Bowling: press {} again to stop the game", _padActive ? std::string("B") : Settings::Key(s.keyQuit)));
 		}
 
 		if ((_phase != Phase::kAiming && _phase != Phase::kPickup) || AiTurn()) {
@@ -326,16 +357,34 @@ namespace fb
 		if (down[0] != down[1]) {
 			_releaseY = std::clamp(_releaseY + (down[0] ? 1.0 : -1.0) * s.moveSpeed * a_dt, -edge, edge);
 		}
-		// the throw: hold the left button and pull back, let go
+		if (pad.lx != 0.0f || pad.buttons & (Pad::kLeft | Pad::kRight)) {
+			// (stick left: to your left, the lane frame's +y; the d-pad too)
+			const float dpad = (pad.buttons & Pad::kLeft) ? -1.0f : (pad.buttons & Pad::kRight) ? 1.0f : 0.0f;
+			const float move = pad.lx != 0.0f ? pad.lx : dpad;
+			_releaseY = std::clamp(_releaseY - static_cast<double>(move) * s.moveSpeed * a_dt, -edge, edge);
+		}
+		// the controller's aim and swing: the right stick, by rate (the mouse's come in through OnLookMouse)
+		if (_charging && _padSwing) {
+			const float pull = -pad.ry * (s.padInvertPull ? -1.0f : 1.0f);  // (stick pulled back: down)
+			_power = std::clamp(_power.load() + pull * s.padPowerSpeed * a_dt, 0.0f, 1.0f);
+			_swingHook = std::clamp(_swingHook - pad.rx * s.padSpinSpeed * a_dt, -200.0f, 200.0f);
+		} else if (!_charging && pad.rx != 0.0f) {
+			constexpr float kRad = 0.017453292f;
+			const float     maxAim = s.maxAim * kRad;
+			_aimAngle = std::clamp(_aimAngle - pad.rx * s.padAimSpeed * kRad * a_dt, -maxAim, maxAim);
+		}
+		// the throw: hold the left button (or RT) and pull back, let go
 		if (_phase == Phase::kAiming) {
-			if (lmbPressed) {
+			if (lmbPressed || rtPressed) {
 				_power = 0.0f;
 				_swingHook = 0.0f;
 				_charging = true;
-			} else if (lmbReleased && _charging) {
+				_padSwing = rtPressed;
+			} else if (_charging && (_padSwing ? rtReleased : lmbReleased)) {
 				_charging = false;
 				if (_power.load() < 0.02f) {
-					Say("Bowling: pull the mouse back while you hold the button to put power on it");
+					Say(_padSwing ? "Bowling: pull the right stick back while you hold RT to put power on it"
+					              : "Bowling: pull the mouse back while you hold the button to put power on it");
 				} else {
 					Throw(_power.load(), false);
 				}
@@ -371,9 +420,11 @@ namespace fb
 		BlockActivate(_lookLane != nullptr);
 		std::scoped_lock lock(_hudMutex);
 		if (_lookLane) {
-			_hud.prompt = std::format("{}) START BOWLING", util::Upper(Settings::Key(_activateVk)));
+			_hud.prompt = std::format("{}) START BOWLING", _padActive ? std::string("A") : util::Upper(Settings::Key(_activateVk)));
 			const Mode* mode = _modes.empty() ? nullptr : &_modes[static_cast<std::size_t>(_mode)];
-			_hud.promptSub = std::format("<  {}  >     LANE {}", mode ? mode->label : std::string("SOLO"), _lookLane->number);
+			const std::string label = mode ? mode->label : std::string("SOLO");
+			_hud.promptSub = _padActive ? std::format("LB <  {}  > RB     LANE {}", label, _lookLane->number)
+			                            : std::format("<  {}  >     LANE {}", label, _lookLane->number);
 			_hud.promptVs.clear();
 			if (mode && mode->missing > 0) {
 				const int found = static_cast<int>(mode->npcs.size());
@@ -611,6 +662,7 @@ namespace fb
 		if (_phase == Phase::kNone) {
 			return;
 		}
+		Pad::StopRumble();
 		auto remove = [](RE::ObjectRefHandle& a_handle) {
 			if (auto ref = a_handle.get()) {
 				ref->Disable();
@@ -964,6 +1016,10 @@ namespace fb
 			int going = 0;
 			for (const auto& p : _sim->Pins()) {
 				going += (p.state != bowl::PinState::kSwept && !p.asleep && p.vel.Length() > 25.0) ? 1 : 0;
+			}
+			if (_padActive && Settings::Get().rumble && !AiTurn()) {
+				const float k = std::min(1.0f, 0.25f + 0.075f * static_cast<float>(going));
+				Pad::Rumble(k, k * 0.6f, 0.12f + 0.025f * static_cast<float>(going));
 			}
 			if (going >= kCrashPins) {
 				Audio::Play(Audio::Bank::kCrash, _impactPos, std::min(1.0f, 0.7f + 0.04f * static_cast<float>(going)));

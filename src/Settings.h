@@ -28,6 +28,17 @@ namespace fb
 		int   keyQuit{ 0x58 };        // X, twice: stop the game
 		float activateDistance{ 240.0f };  // how close to a ball return F works
 
+		// [Controller] an Xbox-style controller (XInput) works alongside the mouse and keyboard: A starts at a ball return,
+		// LB/RB pick how many play; the left stick moves along the foul line, the right stick aims; hold RT and pull the
+		// right stick back for power, sideways for spin, let go of RT to throw; B twice stops the game
+		bool  controller{ true };
+		float padAimSpeed{ 4.0f };     // degrees of aim per second, the right stick all the way over
+		float padPowerSpeed{ 1.3f };   // power per second, the right stick pulled all the way back (1 = full)
+		float padSpinSpeed{ 160.0f };  // percent of full hook per second, the right stick all the way over during the swing
+		float padDeadzone{ 0.22f };    // how far a stick moves before it counts (0..0.9)
+		bool  padInvertPull{ false };  // pushing the stick forward gives power instead
+		bool  rumble{ true };          // a buzz when the ball hits the pins
+
 		// [Throw] the mouse aims (the camera stays put); hold the left button, pull back for power, let go to throw
 		float minSpeed{ 300.0f };      // the ball's speed at the least power, units per second
 		float maxSpeed{ 820.0f };      // ...and at full power

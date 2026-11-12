@@ -999,6 +999,15 @@ namespace fb::Hud
 			save(Checkbox("Ball rolls back up the gutter to the return", &s.gutterReturn));
 			save(Checkbox("Lights over the pins (from the next game)", &s.pinLights));
 			slider("Light brightness", s.pinLightBrightness, 0.1f, 1.5f, "%.2f");
+
+			Spacing();
+			Text("Controller");
+			Separator();
+			save(Checkbox("Controller", &s.controller));
+			save(Checkbox("Rumble when the ball hits the pins", &s.rumble));
+			slider("Aim speed", s.padAimSpeed, 0.5f, 12.0f, "%.1f");
+			slider("Power speed", s.padPowerSpeed, 0.3f, 4.0f, "%.2f");
+			save(Checkbox("Push the stick forward for power", &s.padInvertPull));
 		}
 
 		F4SEMenuFramework::Model::HudElement* g_element{ nullptr };

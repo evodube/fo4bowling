@@ -17,6 +17,12 @@ prompt shows who you'd be playing, or that there aren't enough people nearby for
   right-hander's hook; right hooks right), then let go. Letting go at 0% cancels.
 - **X twice** stops the game.
 
+On a controller (any Xbox-style one), next to the mouse and keyboard: **A** at a ball return starts and **LB / RB**
+pick how many play. The **right stick** aims, the **left stick** (or the d-pad) moves you along the foul line. **Hold
+RT**, pull the right stick back for power and push it sideways for spin, then let go of RT. **B twice** stops the
+game. The HUD shows the controller's buttons once you use it, and it buzzes when the ball hits the pins
+(`[Controller]` in the INI and the settings page set its speeds, or turn it or the rumble off).
+
 The ball skids through the oil on the front of the lane and hooks once it reaches the dry back end, so a hook ball
 wants to start out wide and come back into the pocket (the 1-3 for a right-hander, the 1-2 for a left-hander). No
 two balls are quite the same: every throw strays a little from what you set up (more when you throw it hard), the

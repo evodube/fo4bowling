@@ -141,7 +141,10 @@ namespace fb
 		if (!_activateLayer && !manager->AllocateNewLayer(_activateLayer, "fo4bowling ball return")) {
 			return;
 		}
-		manager->EnableUserEvent(_activateLayer->layerID, RE::UserEvents::USER_EVENT_FLAG::kActivate, !a_block, RE::UserEvents::SENDER_ID::kGameplay);
+		// (and on a controller, LB/RB pick how many play here: no grenade or bash)
+		using Flag = RE::UserEvents::USER_EVENT_FLAG;
+		const auto flags = static_cast<Flag>(std::to_underlying(Flag::kActivate) | std::to_underlying(Flag::kFighting));
+		manager->EnableUserEvent(_activateLayer->layerID, flags, !a_block, RE::UserEvents::SENDER_ID::kGameplay);
 		_activateBlocked = a_block;
 	}
 
@@ -213,7 +216,10 @@ namespace fb
 		const bool repeat = a_event == _lastMouseEvent && a_event->timeCode == _lastMouseTime;
 		_lastMouseEvent = a_event;
 		_lastMouseTime = a_event->timeCode;
-		if (!repeat && aiming) {
+		if (!repeat && (std::abs(a_event->mouseInputX) > 2 || std::abs(a_event->mouseInputY) > 2)) {
+			_padActive = false;  // (the HUD names keys again)
+		}
+		if (!repeat && aiming && !(_charging && _padSwing)) {
 			const auto& s = Settings::Get();
 			if (_charging) {
 				// the swing: pulling back is power, sideways is spin (left hooks left)

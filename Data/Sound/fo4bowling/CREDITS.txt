@@ -1,0 +1,33 @@
+The sounds in Data\Sound\fo4bowling are cut from real bowling recordings on Freesound, released under CC0 1.0
+(public domain) except the pinsetter (CC BY 4.0, credited below) and the announcer. They were converted to mono 44.1 kHz, trimmed, faded, de-hissed and levelled for the mod; the hits
+are a pin knock layered with a pin-on-pin clack or two.
+
+  crash_1, release_1
+      "Bowling Ball Hits Pins, Once" by CHallSmith
+      https://freesound.org/people/CHallSmith/sounds/870830/
+  crash_2   "Bowling Strike" by SieuAmThanh
+      https://freesound.org/people/SieuAmThanh/sounds/514385/
+  crash_3   "SPRTInd-Int_BowlingStrike_Zus_OwSfx_Hard" by ZusIsKing
+      https://freesound.org/people/ZusIsKing/sounds/766871/
+  crash_4   "bowling (strike/spare)" by Raclure
+      https://freesound.org/people/Raclure/sounds/458869/
+  crash_5, crash_6
+      "Bowling.wav" by Rehanjo
+      https://freesound.org/people/Rehanjo/sounds/593593/
+  hit_*     "Single bowling pin knock" by Rvgerxini, with "bowling pins stereo" by Bruce Burbank
+      https://freesound.org/people/Rvgerxini/sounds/499788/
+      https://freesound.org/people/Bruce%20Burbank/sounds/151204/
+  roll_1, release_2
+      "Bowling Ball.wav" by driftworks
+      https://freesound.org/people/driftworks/sounds/128969/
+  pin_*
+      "bowling pins mono" by Bruce Burbank
+      https://freesound.org/people/Bruce%20Burbank/sounds/151203/
+  machine_1, set_*
+      "Keilakoneisto, keilojen nosto / Bowling machine, lifting bowling pins" by YleArkisto (Yle Archives),
+      licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); cut, filtered and levelled
+      https://freesound.org/people/YleArkisto/sounds/367083/
+  announce_*
+      The alley PA's calls were made for the mod with Chatterbox by Resemble AI (MIT licence,
+      https://github.com/resemble-ai/chatterbox), using a voice from Kokoro (Apache 2.0) as the speaker, then put
+      through a horn-speaker filter and a hall echo. Chatterbox marks its audio with an inaudible Perth watermark.
